@@ -66,6 +66,7 @@ class FakeMeshCore:
         pubkey_prefix: str = "abcdef123456",
         path_len: int | None = None,
         path: str | None = None,
+        path_hash_mode: int | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "type": "PRIV",
@@ -76,6 +77,8 @@ class FakeMeshCore:
             payload["path_len"] = path_len
         if path is not None:
             payload["path"] = path
+        if path_hash_mode is not None:
+            payload["path_hash_mode"] = path_hash_mode
         event = FakeEvent(EventType.CONTACT_MSG_RECV, payload)
         await self.callbacks[EventType.CONTACT_MSG_RECV](event)
 
@@ -85,6 +88,7 @@ class FakeMeshCore:
         channel_idx: int = 0,
         path_len: int | None = None,
         path: str | None = None,
+        path_hash_mode: int | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "type": "CHAN",
@@ -95,6 +99,8 @@ class FakeMeshCore:
             payload["path_len"] = path_len
         if path is not None:
             payload["path"] = path
+        if path_hash_mode is not None:
+            payload["path_hash_mode"] = path_hash_mode
         event = FakeEvent(EventType.CHANNEL_MSG_RECV, payload)
         await self.callbacks[EventType.CHANNEL_MSG_RECV](event)
 
@@ -186,8 +192,14 @@ class TestDirectMessages:
     async def test_dm_path_is_passed_through(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
-        await mc.deliver_dm("!path", path_len=2, path="a1b2")
+        await mc.deliver_dm("!path", path_len=2, path="a1b2", path_hash_mode=0)
         assert mc.commands.sent_msgs == [(ALICE, "2 hops via a1,b2")]
+
+    async def test_dm_path_with_3_byte_hashes(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await mc.deliver_dm("!path", path_len=2, path="a1b2c3d4e5f6", path_hash_mode=2)
+        assert mc.commands.sent_msgs == [(ALICE, "2 hops via a1b2c3,d4e5f6")]
 
     async def test_dm_without_path_info_reports_unknown(
         self, runner: MeshCoreRunner, mc: FakeMeshCore

@@ -90,6 +90,7 @@ class MeshCoreRunner:
             sender_name=contact.get("adv_name"),
             path_len=payload.get("path_len"),
             path=payload.get("path"),
+            path_hash_mode=payload.get("path_hash_mode"),
         )
 
         async def reply(text: str) -> None:
@@ -118,6 +119,7 @@ class MeshCoreRunner:
             channel_idx=channel_idx,
             path_len=payload.get("path_len"),
             path=payload.get("path"),
+            path_hash_mode=payload.get("path_hash_mode"),
         )
 
         async def reply(text: str) -> None:

@@ -26,3 +26,16 @@ class TestPathDescription:
     def test_hops_with_path(self) -> None:
         message = IncomingMessage(text="hi", path_len=2, path="a1b2")
         assert message.path_description == "2 hops via a1,b2"
+
+    def test_hash_mode_sets_bytes_per_hop(self) -> None:
+        message = IncomingMessage(
+            text="hi", path_len=2, path="a1b2c3d4e5f6", path_hash_mode=2
+        )
+        assert message.path_hash_size == 3
+        assert message.path_description == "2 hops via a1b2c3,d4e5f6"
+
+    def test_hash_mode_defaults_to_single_byte(self) -> None:
+        assert IncomingMessage(text="hi").path_hash_size == 1
+        direct = IncomingMessage(text="hi", path_len=255, path_hash_mode=-1)
+        assert direct.path_hash_size == 1
+        assert direct.path_description == "direct"
