@@ -8,7 +8,7 @@ and routing replies back to wherever the message came from.
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - A MeshCore companion device reachable over serial, BLE, or TCP
 

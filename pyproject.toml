@@ -3,7 +3,7 @@ name = "ottawa-meshbot"
 version = "0.1.0"
 description = "A MeshCore chatbot framework with pluggable commands"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "meshcore>=2.3.7",
 ]
