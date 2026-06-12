@@ -126,7 +126,7 @@ class MeshCoreRunner:
     async def _resolve_contact(self, prefix: str | None) -> dict[str, Any] | None:
         if not prefix:
             return None
-        contact = self.mc.get_contact_by_key_prefix(prefix)
+        contact: dict[str, Any] | None = self.mc.get_contact_by_key_prefix(prefix)
         if contact is None:
             # Maybe a contact added since startup; refresh the list once.
             await self.mc.ensure_contacts()
