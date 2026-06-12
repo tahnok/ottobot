@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,11 @@ class IncomingMessage:
     outermost repeater first. path_hash_mode sets the hash width: mode N
     means N+1 bytes per hop (mode 0 = legacy 1-byte hashes, mode 2 =
     3-byte hashes); -1 is reported for direct messages.
+
+    raw is the unmodified event payload from the transport — for meshcore,
+    the *_MSG_RECV payload dict (SNR, sender_timestamp, txt_type, ...).
+    It is an escape hatch for transport data the framework doesn't model;
+    None when the message was built without a transport (e.g. in tests).
     """
 
     text: str
@@ -29,6 +35,7 @@ class IncomingMessage:
     path_len: int | None = None
     path: str | None = None
     path_hash_mode: int | None = None
+    raw: dict[str, Any] | None = None
 
     @property
     def is_dm(self) -> bool:
@@ -87,6 +94,11 @@ class Context:
     @property
     def path_description(self) -> str:
         return self.message.path_description
+
+    @property
+    def raw(self) -> dict[str, Any] | None:
+        """The unmodified transport event payload, if any (escape hatch)."""
+        return self.message.raw
 
     async def reply(self, text: str) -> None:
         """Send text back where the message came from (DM or channel)."""

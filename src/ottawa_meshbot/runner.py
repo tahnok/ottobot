@@ -91,6 +91,7 @@ class MeshCoreRunner:
             path_len=payload.get("path_len"),
             path=payload.get("path"),
             path_hash_mode=payload.get("path_hash_mode"),
+            raw=payload,
         )
 
         async def reply(text: str) -> None:
@@ -120,6 +121,7 @@ class MeshCoreRunner:
             path_len=payload.get("path_len"),
             path=payload.get("path"),
             path_hash_mode=payload.get("path_hash_mode"),
+            raw=payload,
         )
 
         async def reply(text: str) -> None:

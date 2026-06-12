@@ -22,7 +22,13 @@ bot = MeshBot(prefix="!")
 
 @bot.command("ping", help="Check that the bot is alive")
 async def ping(ctx: Context) -> str:
-    return f"pong ({ctx.path_description})"
+    pong = f"pong ({ctx.path_description})"
+    # ctx.raw is the full meshcore payload, for fields the framework
+    # doesn't model — e.g. SNR, reported by firmware protocol v3+.
+    snr = (ctx.raw or {}).get("SNR")
+    if snr is not None:
+        pong += f" SNR {snr}dB"
+    return pong
 
 
 @bot.command("echo", help="Repeat back whatever you send")

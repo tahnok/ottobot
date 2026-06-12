@@ -124,6 +124,11 @@ def bot() -> MeshBot:
     async def path(ctx: Context) -> str:
         return ctx.path_description
 
+    @bot.command("raw")
+    async def raw(ctx: Context) -> str:
+        assert ctx.raw is not None
+        return f"{ctx.raw.get('pubkey_prefix')} {ctx.raw.get('channel_idx')}"
+
     return bot
 
 
@@ -207,6 +212,12 @@ class TestDirectMessages:
         await mc.deliver_dm("!path")
         assert mc.commands.sent_msgs == [(ALICE, "unknown path")]
 
+    async def test_dm_exposes_raw_payload(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await mc.deliver_dm("!raw")
+        assert mc.commands.sent_msgs == [(ALICE, "abcdef123456 None")]
+
 
 class TestChannelMessages:
     async def test_channel_command_replies_on_same_channel(
@@ -232,6 +243,12 @@ class TestChannelMessages:
     ) -> None:
         await mc.deliver_chan("alice: !path", path_len=255)
         assert mc.commands.sent_chan_msgs == [(0, "direct")]
+
+    async def test_channel_exposes_raw_payload(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await mc.deliver_chan("alice: !raw", channel_idx=2)
+        assert mc.commands.sent_chan_msgs == [(2, "None 2")]
 
     async def test_channel_messages_ignored_when_bot_disabled_for_channels(
         self, mc: FakeMeshCore

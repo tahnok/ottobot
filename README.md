@@ -61,6 +61,7 @@ Useful things on `Context`:
 | `ctx.sender_name` | Sender's name (contact name for DMs, `Name:` text convention for channels) |
 | `ctx.is_dm` | `True` for direct messages, `False` for channel messages |
 | `ctx.path_description` | Route the message took, e.g. `"direct"` or `"2 hops via a1,b2"` |
+| `ctx.raw` | The unmodified meshcore event payload (SNR, sender_timestamp, ...) — escape hatch for fields the framework doesn't model |
 | `ctx.message` | The full `IncomingMessage` (text, sender key, channel index, path) |
 
 A `!help` command listing every registered command is built in. Exceptions
