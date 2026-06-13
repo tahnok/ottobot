@@ -2,7 +2,7 @@
 
 This module is transport-agnostic. It knows nothing about radios or the
 meshcore library — it just maps incoming messages to command handlers.
-The meshcore wiring lives in ottawa_meshbot.runner.
+The meshcore wiring lives in ottobot.runner.
 """
 
 from __future__ import annotations

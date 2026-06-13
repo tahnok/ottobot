@@ -1,8 +1,8 @@
 import pytest
 
 from helpers import ReplyRecorder, dm
-from ottawa_meshbot import MeshBot
-from ottawa_meshbot.commands import ping, register_module
+from ottobot import MeshBot
+from ottobot.commands import ping, register_module
 
 
 @pytest.fixture

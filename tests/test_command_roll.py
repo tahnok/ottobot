@@ -3,8 +3,8 @@ import re
 import pytest
 
 from helpers import ReplyRecorder, dm
-from ottawa_meshbot import MeshBot
-from ottawa_meshbot.commands import register_module, roll
+from ottobot import MeshBot
+from ottobot.commands import register_module, roll
 
 
 @pytest.fixture

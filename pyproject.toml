@@ -1,5 +1,5 @@
 [project]
-name = "ottawa-meshbot"
+name = "ottobot"
 version = "0.1.0"
 description = "An Ottawa mesh bot for MeshCore networks, with community-contributed commands"
 readme = "README.md"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ottawa-meshbot = "ottawa_meshbot.cli:main"
+ottobot = "ottobot.cli:main"
 
 [dependency-groups]
 dev = [

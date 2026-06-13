@@ -2,7 +2,7 @@
 
 import random
 
-from ottawa_meshbot import Context, command
+from ottobot import Context, command
 
 
 @command("roll", help="Roll a die, e.g. !roll 20", aliases=("dice",))

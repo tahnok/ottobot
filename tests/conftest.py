@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import ReplyRecorder
-from ottawa_meshbot import MeshBot
+from ottobot import MeshBot
 
 
 @pytest.fixture

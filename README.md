@@ -1,4 +1,4 @@
-# ottawa-meshbot
+# ottobot
 
 A chatbot for Ottawa's [MeshCore](https://meshcore.co.uk/) mesh radio
 network, built on the [`meshcore`](https://pypi.org/project/meshcore/)
@@ -17,17 +17,17 @@ single file, picked up automatically. See
 
 ```bash
 uv sync
-uv run ottawa-meshbot --serial /dev/ttyUSB0
-uv run ottawa-meshbot --ble AA:BB:CC:DD:EE:FF
-uv run ottawa-meshbot --tcp 192.168.1.50:5000
+uv run ottobot --serial /dev/ttyUSB0
+uv run ottobot --ble AA:BB:CC:DD:EE:FF
+uv run ottobot --tcp 192.168.1.50:5000
 ```
 
-(`uv run python -m ottawa_meshbot ...` works too.)
+(`uv run python -m ottobot ...` works too.)
 
 ## Trying commands without a radio
 
 ```bash
-uv run ottawa-meshbot --simulate
+uv run ottobot --simulate
 ```
 
 opens an interactive simulator: type messages exactly as you would send
@@ -60,18 +60,18 @@ the bot:
 ## Contributing a command
 
 Every command lives in its own file under
-[`src/ottawa_meshbot/commands/`](src/ottawa_meshbot/commands/) and is
+[`src/ottobot/commands/`](src/ottobot/commands/) and is
 discovered automatically — there is no central list to edit. To add one:
 
-1. Copy `src/ottawa_meshbot/commands/ping.py` to
-   `src/ottawa_meshbot/commands/yourcommand.py`.
+1. Copy `src/ottobot/commands/ping.py` to
+   `src/ottobot/commands/yourcommand.py`.
 2. Define your handler at the top level with `@command(...)`. The whole
    `ping.py` looks like this:
 
    ```python
    """!ping — check that the bot is alive and see how your message got there."""
 
-   from ottawa_meshbot import Context, command
+   from ottobot import Context, command
 
 
    @command("ping", help="Check that the bot is alive")
@@ -85,7 +85,7 @@ discovered automatically — there is no central list to edit. To add one:
        return pong
    ```
 
-3. Try it out interactively with `uv run ottawa-meshbot --simulate` — see
+3. Try it out interactively with `uv run ottobot --simulate` — see
    [Trying commands without a radio](#trying-commands-without-a-radio).
 4. Add a matching `tests/test_command_yourcommand.py` (copy
    `tests/test_command_ping.py` for the shape).
@@ -120,13 +120,13 @@ instead of crashing the bot.
 ## Project layout
 
 ```
-src/ottawa_meshbot/
+src/ottobot/
   bot.py        MeshBot: command parsing and dispatch (transport-agnostic)
   registry.py   Command + CommandRegistry (names, aliases, help text)
   context.py    IncomingMessage and the Context passed to handlers
   runner.py     MeshCoreRunner: wires the bot to a meshcore device
   simulator.py  Interactive in-memory REPL for testing commands (--simulate)
-  cli.py        The ottawa-meshbot entry point
+  cli.py        The ottobot entry point
   commands/     The bot's commands, one file each — add yours here
 tests/
 ```

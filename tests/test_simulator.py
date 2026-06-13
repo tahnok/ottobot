@@ -1,8 +1,8 @@
 import pytest
 
-from ottawa_meshbot import Context, MeshBot
-from ottawa_meshbot.cli import parse_args
-from ottawa_meshbot.simulator import Simulator
+from ottobot import Context, MeshBot
+from ottobot.cli import parse_args
+from ottobot.simulator import Simulator
 
 
 @pytest.fixture

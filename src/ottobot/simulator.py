@@ -1,6 +1,6 @@
 """An interactive simulator for trying out commands without a radio.
 
-    ottawa-meshbot --simulate
+    ottobot --simulate
 
 Type messages exactly as you would send them over the mesh ("!ping",
 "!roll 20", ...) and the bot's replies are printed back — nothing touches

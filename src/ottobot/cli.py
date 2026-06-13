@@ -1,14 +1,14 @@
-"""Run the Ottawa MeshBot against a MeshCore companion device.
+"""Run Ottobot against a MeshCore companion device.
 
-    ottawa-meshbot --serial /dev/ttyUSB0
-    ottawa-meshbot --ble AA:BB:CC:DD:EE:FF
-    ottawa-meshbot --tcp 192.168.1.50:5000
+    ottobot --serial /dev/ttyUSB0
+    ottobot --ble AA:BB:CC:DD:EE:FF
+    ottobot --tcp 192.168.1.50:5000
 
 Then message the node "!help" (in a DM or on channel 0) to see commands.
 
 To try commands locally without a device or touching the mesh:
 
-    ottawa-meshbot --simulate
+    ottobot --simulate
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from .simulator import Simulator
 
 
 def build_bot(prefix: str = "!") -> MeshBot:
-    """A MeshBot with every command in ottawa_meshbot.commands loaded."""
+    """A MeshBot with every command in ottobot.commands loaded."""
     bot = MeshBot(prefix=prefix)
     load_commands(bot)
     return bot
@@ -32,7 +32,7 @@ def build_bot(prefix: str = "!") -> MeshBot:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="ottawa-meshbot",
+        prog="ottobot",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
