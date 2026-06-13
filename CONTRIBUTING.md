@@ -1,19 +1,19 @@
 # Contributing
 
 The easiest way to contribute is to add a command. Every command is one
-file in `src/ottawa_meshbot/commands/` plus one test file, and is picked
+file in `src/ottobot/commands/` plus one test file, and is picked
 up automatically — there is no central list to edit.
 
 ## Adding a command
 
-1. Create `src/ottawa_meshbot/commands/<name>.py` (lowercase module name,
+1. Create `src/ottobot/commands/<name>.py` (lowercase module name,
    matching the command). Define the handler at the top level with the
    `@command` marker — it is collected and registered when the bot loads:
 
    ```python
    """!greet — say hi."""
 
-   from ottawa_meshbot import Context, command
+   from ottobot import Context, command
 
 
    @command("greet", help="Say hi", aliases=("hello",))

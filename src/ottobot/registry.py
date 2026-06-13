@@ -32,7 +32,7 @@ def command(
 
     This only attaches metadata to the function — no bot instance is
     needed at import time. The command modules under
-    ottawa_meshbot.commands use this; load_commands() later collects the
+    ottobot.commands use this; load_commands() later collects the
     marked handlers via module_commands() and registers them on the bot.
     """
 

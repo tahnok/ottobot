@@ -4,8 +4,8 @@ from typing import Any
 import pytest
 from meshcore import EventType
 
-from ottawa_meshbot import Context, MeshBot
-from ottawa_meshbot.runner import MeshCoreRunner
+from ottobot import Context, MeshBot
+from ottobot.runner import MeshCoreRunner
 
 
 @dataclass

@@ -1,6 +1,6 @@
 """!ping — check that the bot is alive and see how your message got there."""
 
-from ottawa_meshbot import Context, command
+from ottobot import Context, command
 
 
 @command("ping", help="Check that the bot is alive")

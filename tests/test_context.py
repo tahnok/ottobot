@@ -1,4 +1,4 @@
-from ottawa_meshbot.context import IncomingMessage
+from ottobot.context import IncomingMessage
 
 
 class TestHopCount:

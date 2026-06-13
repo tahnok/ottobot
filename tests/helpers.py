@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ottawa_meshbot.context import IncomingMessage
+from ottobot.context import IncomingMessage
 
 
 def dm(text: str, **extra: Any) -> IncomingMessage:

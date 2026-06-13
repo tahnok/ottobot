@@ -1,6 +1,6 @@
 """!echo — repeat back whatever you send."""
 
-from ottawa_meshbot import Context, command
+from ottobot import Context, command
 
 
 @command("echo", help="Repeat back whatever you send")

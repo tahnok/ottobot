@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import ReplyRecorder, channel_msg, dm
-from ottawa_meshbot import Command, Context, MeshBot
+from ottobot import Command, Context, MeshBot
 
 
 class TestParse:
