@@ -41,10 +41,11 @@ class TestMessages:
     async def test_blank_line_prints_nothing(self, sim: Simulator) -> None:
         assert await sim.handle_line("   ") == []
 
-    async def test_defaults_to_dm_with_sender_key(self, sim: Simulator) -> None:
+    async def test_defaults_to_channel_zero(self, sim: Simulator) -> None:
         message = sim.build_message("!ping")
-        assert message.is_dm
-        assert message.sender_key is not None
+        assert not message.is_dm
+        assert message.channel_idx == 0
+        assert message.sender_key is None
 
 
 class TestControls:
@@ -58,14 +59,14 @@ class TestControls:
         await sim.handle_line("/channel")
         assert sim.channel_idx == 0
 
-    async def test_dm_switches_back(self, sim: Simulator) -> None:
-        await sim.handle_line("/channel")
+    async def test_dm_switch_carries_sender_key(self, sim: Simulator) -> None:
         await sim.handle_line("/dm")
         assert await sim.handle_line("!whoami") == ["bot> you via dm"]
+        assert sim.build_message("x").sender_key is not None
 
     async def test_name_changes_sender(self, sim: Simulator) -> None:
         await sim.handle_line("/name alice")
-        assert await sim.handle_line("!whoami") == ["bot> alice via dm"]
+        assert await sim.handle_line("!whoami") == ["bot> alice via channel 0"]
 
     async def test_hops_with_route_shows_in_path(self, sim: Simulator) -> None:
         await sim.handle_line("/hops 2 a1,b2")
@@ -99,10 +100,10 @@ class TestControls:
         assert "/help" in notice
 
     async def test_prompt_tracks_persona(self, sim: Simulator) -> None:
-        assert sim.prompt == "you@dm> "
+        assert sim.prompt == "you@ch0> "
         await sim.handle_line("/name alice")
-        await sim.handle_line("/channel 3")
-        assert sim.prompt == "alice@ch3> "
+        await sim.handle_line("/dm")
+        assert sim.prompt == "alice@dm> "
 
 
 def test_cli_accepts_simulate_flag() -> None:

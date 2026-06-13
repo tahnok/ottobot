@@ -41,8 +41,8 @@ the bot:
 
 | Control | What it does |
 |---|---|
-| `/dm` | Talk to the bot in a DM (the default) |
-| `/channel [n]` | Talk on channel *n* (default 0) |
+| `/dm` | Talk to the bot in a DM |
+| `/channel [n]` | Talk on channel *n* (default 0, where you start) |
 | `/name <name>` | Change the simulated sender's name |
 | `/hops <n> [a1,b2]` | Pretend messages took *n* repeater hops, optionally via the given hop hashes |
 | `/status` | Show the simulated sender and route |

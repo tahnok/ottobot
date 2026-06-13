@@ -7,8 +7,8 @@ Type messages exactly as you would send them over the mesh ("!ping",
 the network. Lines starting with "/" control the simulated sender instead
 of going to the bot:
 
-    /dm                 talk to the bot in a DM (the default)
-    /channel [n]        talk on channel n (default 0)
+    /dm                 talk to the bot in a DM
+    /channel [n]        talk on channel n (default 0, where you start)
     /name <name>        change the simulated sender's name
     /hops <n> [a1,b2]   pretend messages took n repeater hops, optionally
                         via the given comma-separated hop hashes
@@ -31,8 +31,8 @@ BANNER = (
 )
 
 CONTROL_HELP = [
-    "/dm                 talk to the bot in a DM (the default)",
-    "/channel [n]        talk on channel n (default 0)",
+    "/dm                 talk to the bot in a DM",
+    "/channel [n]        talk on channel n (default 0, where you start)",
     "/name <name>        change the simulated sender's name",
     "/hops <n> [a1,b2]   pretend messages took n repeater hops",
     "/status             show the simulated sender and route",
@@ -56,7 +56,7 @@ class Simulator:
     def __init__(self, bot: MeshBot) -> None:
         self.bot = bot
         self.sender_name = "you"
-        self.channel_idx: int | None = None
+        self.channel_idx: int | None = 0  # start on channel 0, like the mesh default
         self.path_len: int = 255  # arrived direct, like a nearby node
         self.path: str | None = None
         self.done = False
