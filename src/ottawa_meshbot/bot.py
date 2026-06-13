@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from .commands import Command, CommandHandler, CommandRegistry
+from .registry import Command, CommandHandler, CommandRegistry
 from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)

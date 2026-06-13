@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .context import Context
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
+
+_COMMAND_ATTR = "_meshbot_command"
 
 
 @dataclass
@@ -20,6 +23,43 @@ class Command:
     handler: CommandHandler
     help: str = ""
     aliases: tuple[str, ...] = ()
+
+
+def command(
+    name: str, *, help: str = "", aliases: tuple[str, ...] = ()
+) -> Callable[[CommandHandler], CommandHandler]:
+    """Mark a module-level coroutine as a command handler.
+
+    This only attaches metadata to the function — no bot instance is
+    needed at import time. The command modules under
+    ottawa_meshbot.commands use this; load_commands() later collects the
+    marked handlers via module_commands() and registers them on the bot.
+    """
+
+    def decorator(handler: CommandHandler) -> CommandHandler:
+        setattr(
+            handler,
+            _COMMAND_ATTR,
+            Command(name=name, handler=handler, help=help, aliases=aliases),
+        )
+        return handler
+
+    return decorator
+
+
+def module_commands(module: ModuleType) -> list[Command]:
+    """The @command-marked handlers defined in *module*, in definition order.
+
+    Handlers merely imported into the module (e.g. from a shared helper)
+    are excluded, so importing another command's handler can't register
+    it twice.
+    """
+    return [
+        cmd
+        for obj in vars(module).values()
+        if (cmd := getattr(obj, _COMMAND_ATTR, None)) is not None
+        and getattr(obj, "__module__", None) == module.__name__
+    ]
 
 
 @dataclass

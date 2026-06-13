@@ -1,12 +1,15 @@
 [project]
 name = "ottawa-meshbot"
 version = "0.1.0"
-description = "A MeshCore chatbot framework with pluggable commands"
+description = "An Ottawa mesh bot for MeshCore networks, with community-contributed commands"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "meshcore>=2.3.7",
 ]
+
+[project.scripts]
+ottawa-meshbot = "ottawa_meshbot.cli:main"
 
 [dependency-groups]
 dev = [
@@ -22,3 +25,4 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["tests"]

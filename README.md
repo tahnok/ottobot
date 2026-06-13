@@ -1,10 +1,11 @@
 # ottawa-meshbot
 
-A small framework for building chatbots on [MeshCore](https://meshcore.co.uk/)
-mesh radio networks, built on the [`meshcore`](https://pypi.org/project/meshcore/)
-Python library. You define commands with a decorator; the framework handles
-listening to the device, parsing `!command` messages from DMs and channels,
-and routing replies back to wherever the message came from.
+A chatbot for Ottawa's [MeshCore](https://meshcore.co.uk/) mesh radio
+network, built on the [`meshcore`](https://pypi.org/project/meshcore/)
+Python library. Message it `!help` on the mesh (in a DM or on a channel it
+monitors) and it answers. Anyone can contribute a command — each one is a
+single file, picked up automatically. See
+[Contributing a command](#contributing-a-command).
 
 ## Requirements
 
@@ -12,40 +13,62 @@ and routing replies back to wherever the message came from.
 - [uv](https://docs.astral.sh/uv/)
 - A MeshCore companion device reachable over serial, BLE, or TCP
 
-## Quick start
+## Running the bot
 
 ```bash
 uv sync
-uv run examples/example_bot.py --serial /dev/ttyUSB0
+uv run ottawa-meshbot --serial /dev/ttyUSB0
+uv run ottawa-meshbot --ble AA:BB:CC:DD:EE:FF
+uv run ottawa-meshbot --tcp 192.168.1.50:5000
 ```
 
-Then send the node a DM (or post on a channel it monitors) saying `!help`.
+(`uv run python -m ottawa_meshbot ...` works too.)
 
-## Writing your own bot
+## Commands
 
-Create a script, register commands on a `MeshBot`, and hand it to the runner:
+| Command | What it does |
+|---|---|
+| `!help` | List all commands |
+| `!ping` | Pong back with the path your message took (and SNR when available) |
+| `!echo <text>` | Repeat back whatever you send |
+| `!roll [sides]` | Roll a die, default d6 (alias: `!dice`) |
 
-```python
-import asyncio
-from ottawa_meshbot import MeshBot, Context
-from ottawa_meshbot.runner import MeshCoreRunner, connect
+## Contributing a command
 
-bot = MeshBot(prefix="!")
+Every command lives in its own file under
+[`src/ottawa_meshbot/commands/`](src/ottawa_meshbot/commands/) and is
+discovered automatically — there is no central list to edit. To add one:
 
-@bot.command("ping", help="Check that the bot is alive")
-async def ping(ctx: Context) -> str:
-    return f"pong ({ctx.path_description})"  # e.g. "pong (direct)" or "pong (2 hops via a1,b2)"
+1. Copy `src/ottawa_meshbot/commands/ping.py` to
+   `src/ottawa_meshbot/commands/yourcommand.py`.
+2. Define your handler at the top level with `@command(...)`. The whole
+   `ping.py` looks like this:
 
-@bot.command("greet", help="Say hi", aliases=("hello",))
-async def greet(ctx: Context) -> str:
-    return f"Hi {ctx.sender_name or 'there'}!"
+   ```python
+   """!ping — check that the bot is alive and see how your message got there."""
 
-async def main():
-    mc = await connect(serial="/dev/ttyUSB0")
-    await MeshCoreRunner(bot, mc).run_forever()
+   from ottawa_meshbot import Context, command
 
-asyncio.run(main())
-```
+
+   @command("ping", help="Check that the bot is alive")
+   async def ping(ctx: Context) -> str:
+       pong = f"pong ({ctx.path_description})"
+       # ctx.raw is the full meshcore payload, for fields the framework
+       # doesn't model — e.g. SNR, reported by firmware protocol v3+.
+       snr = (ctx.raw or {}).get("SNR")
+       if snr is not None:
+           pong += f" SNR {snr}dB"
+       return pong
+   ```
+
+3. Add a matching `tests/test_command_yourcommand.py` (copy
+   `tests/test_command_ping.py` for the shape).
+4. Run `uv run pytest` and `uv run ty check`.
+5. Open a pull request.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Writing a handler
 
 Command handlers are async functions that receive a `Context` and can:
 
@@ -68,19 +91,16 @@ A `!help` command listing every registered command is built in. Exceptions
 raised by a handler are caught, logged, and reported back to the sender
 instead of crashing the bot.
 
-`MeshBot(prefix="!", respond_in_channels=True)` lets you change the command
-prefix or restrict the bot to DMs only.
-
 ## Project layout
 
 ```
 src/ottawa_meshbot/
   bot.py        MeshBot: command parsing and dispatch (transport-agnostic)
-  commands.py   Command + CommandRegistry (names, aliases, help text)
+  registry.py   Command + CommandRegistry (names, aliases, help text)
   context.py    IncomingMessage and the Context passed to handlers
   runner.py     MeshCoreRunner: wires the bot to a meshcore device
-examples/
-  example_bot.py  Runnable bot with ping/echo/roll commands
+  cli.py        The ottawa-meshbot entry point
+  commands/     The bot's commands, one file each — add yours here
 tests/
 ```
 

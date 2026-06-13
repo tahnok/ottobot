@@ -1,33 +1,7 @@
 import pytest
 
+from helpers import ReplyRecorder, channel_msg, dm
 from ottawa_meshbot import Command, Context, MeshBot
-from ottawa_meshbot.context import IncomingMessage
-
-
-def dm(text: str) -> IncomingMessage:
-    return IncomingMessage(text=text, sender_key="abcd1234", sender_name="alice")
-
-
-def channel_msg(text: str, idx: int = 0) -> IncomingMessage:
-    return IncomingMessage(text=text, sender_name="alice", channel_idx=idx)
-
-
-class ReplyRecorder:
-    def __init__(self) -> None:
-        self.replies: list[str] = []
-
-    async def __call__(self, text: str) -> None:
-        self.replies.append(text)
-
-
-@pytest.fixture
-def bot() -> MeshBot:
-    return MeshBot()
-
-
-@pytest.fixture
-def reply() -> ReplyRecorder:
-    return ReplyRecorder()
 
 
 class TestParse:
