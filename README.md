@@ -24,6 +24,30 @@ uv run ottawa-meshbot --tcp 192.168.1.50:5000
 
 (`uv run python -m ottawa_meshbot ...` works too.)
 
+## Trying commands without a radio
+
+```bash
+uv run ottawa-meshbot --simulate
+```
+
+opens an interactive simulator: type messages exactly as you would send
+them over the mesh (`!ping`, `!roll 20`, ...) and the bot's replies are
+printed back. Everything runs in memory — no device is needed and nothing
+is sent over the mesh, so it's the place to test a command you're working
+on before spamming a real channel.
+
+Lines starting with `/` control the simulated sender instead of going to
+the bot:
+
+| Control | What it does |
+|---|---|
+| `/dm` | Talk to the bot in a DM |
+| `/channel [n]` | Talk on channel *n* (default 0, where you start) |
+| `/name <name>` | Change the simulated sender's name |
+| `/hops <n> [a1,b2]` | Pretend messages took *n* repeater hops, optionally via the given hop hashes |
+| `/status` | Show the simulated sender and route |
+| `/quit` | Leave the simulator |
+
 ## Commands
 
 | Command | What it does |
@@ -61,10 +85,12 @@ discovered automatically — there is no central list to edit. To add one:
        return pong
    ```
 
-3. Add a matching `tests/test_command_yourcommand.py` (copy
+3. Try it out interactively with `uv run ottawa-meshbot --simulate` — see
+   [Trying commands without a radio](#trying-commands-without-a-radio).
+4. Add a matching `tests/test_command_yourcommand.py` (copy
    `tests/test_command_ping.py` for the shape).
-4. Run `uv run pytest` and `uv run ty check`.
-5. Open a pull request.
+5. Run `uv run pytest` and `uv run ty check`.
+6. Open a pull request.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
@@ -99,6 +125,7 @@ src/ottawa_meshbot/
   registry.py   Command + CommandRegistry (names, aliases, help text)
   context.py    IncomingMessage and the Context passed to handlers
   runner.py     MeshCoreRunner: wires the bot to a meshcore device
+  simulator.py  Interactive in-memory REPL for testing commands (--simulate)
   cli.py        The ottawa-meshbot entry point
   commands/     The bot's commands, one file each — add yours here
 tests/
