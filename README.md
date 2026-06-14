@@ -146,7 +146,7 @@ discovered automatically — there is no central list to edit. To add one:
    [Trying commands without a radio](#trying-commands-without-a-radio).
 4. Add a matching `tests/test_command_yourcommand.py` (copy
    `tests/test_command_ping.py` for the shape).
-5. Run `uv run pytest` and `uv run ty check`.
+5. Run `uv run black .`, `uv run pytest`, and `uv run ty check`.
 6. Open a pull request.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -155,11 +155,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
 uv sync          # install dependencies (including dev group)
+uv run black .   # auto-format the code
 uv run pytest    # run the test suite
 uv run ty check  # type check
 ```
 
-Tests run entirely against a fake in-memory device — no radio hardware needed.
+Code is formatted with [black](https://black.readthedocs.io/); CI runs
+`black --check .` alongside the tests and type check, so format before
+pushing. Tests run entirely against a fake in-memory device — no radio
+hardware needed.
 
 ## Notes on MeshCore behavior
 
