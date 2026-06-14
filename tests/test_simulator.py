@@ -66,11 +66,15 @@ class TestControls:
 
     async def test_name_changes_sender(self, sim: Simulator) -> None:
         await sim.handle_line("/name alice")
-        assert await sim.handle_line("@[ottobot] !whoami") == ["bot> alice via channel 0"]
+        assert await sim.handle_line("@[ottobot] !whoami") == [
+            "bot> alice via channel 0"
+        ]
 
     async def test_hops_with_route_shows_in_path(self, sim: Simulator) -> None:
         await sim.handle_line("/hops 2 a1,b2")
-        assert await sim.handle_line("@[ottobot] !ping") == ["bot> pong (2 hops via a1,b2)"]
+        assert await sim.handle_line("@[ottobot] !ping") == [
+            "bot> pong (2 hops via a1,b2)"
+        ]
 
     async def test_hops_zero_means_direct(self, sim: Simulator) -> None:
         await sim.handle_line("/hops 3")

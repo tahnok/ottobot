@@ -233,7 +233,9 @@ class TestAddressing:
         assert handled
         assert reply.replies == ["pong"]
 
-    async def test_channel_opt_out_runs_without_name(self, reply: ReplyRecorder) -> None:
+    async def test_channel_opt_out_runs_without_name(
+        self, reply: ReplyRecorder
+    ) -> None:
         bot = _named_bot()
         handled = await bot.dispatch(channel_msg("!status"), reply)
         assert handled

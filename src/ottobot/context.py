@@ -66,7 +66,9 @@ class IncomingMessage:
         label = "hop" if hops == 1 else "hops"
         if self.path:
             step = self.path_hash_size * 2
-            route = ",".join(self.path[i : i + step] for i in range(0, len(self.path), step))
+            route = ",".join(
+                self.path[i : i + step] for i in range(0, len(self.path), step)
+            )
             return f"{hops} {label} via {route}"
         return f"{hops} {label}"
 
