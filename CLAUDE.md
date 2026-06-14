@@ -99,12 +99,7 @@ The codebase is layered so the core bot logic is transport-agnostic:
 
 ## Testing notes
 
-- Tests run entirely against a fake in-memory bot/device — no radio
-  hardware required.
-- `tests/conftest.py` provides `bot` (fresh `MeshBot()`) and `reply`
-  (`ReplyRecorder`) fixtures.
-- `tests/helpers.py` provides `dm(text, **extra)` and
-  `channel_msg(text, idx=0, **extra)` to build `IncomingMessage`s, and
-  `ReplyRecorder` to capture replies.
-- `pytest-asyncio` is in `auto` mode (see `pyproject.toml`) — async test
-  functions work without extra decorators.
+Tests run against a fake in-memory bot/device — no hardware needed.
+`tests/conftest.py` provides `bot`/`reply` fixtures; `tests/helpers.py`
+provides `dm()`, `channel_msg()`, and `ReplyRecorder`. `pytest-asyncio` is
+in `auto` mode, so async tests need no extra decorators.
