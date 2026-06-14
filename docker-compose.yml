@@ -1,0 +1,34 @@
+# Sample Compose file for running ottobot in a container.
+#
+# By default this pulls the prebuilt image from the GitHub Container Registry.
+# To run your own local changes instead, comment out `image:` and uncomment
+# `build: .` below.
+#
+#   docker compose up         # start the bot
+#   docker compose logs -f    # follow its output
+#   docker compose down       # stop it
+
+services:
+  ottobot:
+    image: ghcr.io/tahnok/ottobot:latest
+    # build: .
+    restart: unless-stopped
+
+    # ottobot needs exactly one transport. Point it at a MeshCore companion
+    # device plugged into the host over USB, and pass that device through to
+    # the container. Adjust the port (e.g. /dev/ttyACM0) to match your host.
+    command: ["--serial", "/dev/ttyUSB0"]
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+    # The container runs as a non-root user, so it needs to belong to the
+    # group that owns the serial device on the host (usually `dialout`, GID
+    # 20 on Debian/Ubuntu). Run `stat -c '%G %g' /dev/ttyUSB0` on the host to
+    # check, and use the numeric GID here if the group name differs.
+    group_add:
+      - "20"
+
+    # --- TCP-connected device ------------------------------------------------
+    # To talk to a companion over the network instead (e.g. an ESP32 running
+    # the firmware in TCP/WiFi mode), drop the `devices:` block above and use:
+    #
+    # command: ["--tcp", "192.168.1.50:5000"]
