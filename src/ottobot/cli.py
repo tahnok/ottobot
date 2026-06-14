@@ -37,7 +37,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--serial", metavar="PORT", help="serial port, e.g. /dev/ttyUSB0")
+    group.add_argument(
+        "--serial", metavar="PORT", help="serial port, e.g. /dev/ttyUSB0"
+    )
     group.add_argument("--ble", metavar="ADDRESS", help="BLE address of the device")
     group.add_argument("--tcp", metavar="HOST:PORT", help="TCP host:port")
     group.add_argument(
@@ -59,7 +61,9 @@ async def run(args: argparse.Namespace) -> None:
         # No device to ask, so fall back to a default name unless pinned.
         await Simulator(build_bot(name=args.name or "ottobot")).repl()
         return
-    mc = await connect(serial=args.serial, baudrate=args.baudrate, ble=args.ble, tcp=args.tcp)
+    mc = await connect(
+        serial=args.serial, baudrate=args.baudrate, ble=args.ble, tcp=args.tcp
+    )
     try:
         # Pin the name with --name, otherwise take the device's own name so
         # channel addressing tracks whatever the node advertises.

@@ -162,8 +162,7 @@ class Simulator:
             else f"mention as @[{self.bot.name}]"
         )
         return (
-            f"{self.sender_name} in {where}, messages arrive {route} "
-            f"({addressing})"
+            f"{self.sender_name} in {where}, messages arrive {route} " f"({addressing})"
         )
 
     async def repl(self) -> None:

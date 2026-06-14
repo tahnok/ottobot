@@ -16,13 +16,16 @@ central registry to edit.
 - Dependency/task runner: [`uv`](https://docs.astral.sh/uv/)
 
 ```bash
-uv sync          # install deps (including dev group)
-uv run pytest    # run the test suite
-uv run ty check  # type check (ty, not mypy)
+uv sync               # install deps (including dev group)
+uv run black .        # auto-format the code (black)
+uv run pytest         # run the test suite
+uv run ty check       # type check (ty, not mypy)
 ```
 
-Always run both `uv run pytest` and `uv run ty check` before considering a
-change done — CI runs exactly these two steps (`.github/workflows/ci.yml`).
+Always run `uv run black --check .`, `uv run pytest`, and `uv run ty check`
+before considering a change done — CI runs exactly these three steps
+(`.github/workflows/ci.yml`). Run `uv run black .` to fix any formatting the
+check flags.
 
 ## Architecture
 

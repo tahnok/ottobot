@@ -14,9 +14,9 @@ from ottobot.registry import module_commands
 def test_every_command_module_defines_a_command() -> None:
     for name in iter_command_module_names():
         module = importlib.import_module(f"ottobot.commands.{name}")
-        assert module_commands(module), (
-            f"{module.__name__} must define at least one @command handler"
-        )
+        assert module_commands(
+            module
+        ), f"{module.__name__} must define at least one @command handler"
 
 
 def test_load_commands_loads_all_modules() -> None:

@@ -135,7 +135,9 @@ class MeshBot:
                 self.name,
             )
             return False
-        ctx = Context(message=message, command_name=command.name, args=args, _reply=reply)
+        ctx = Context(
+            message=message, command_name=command.name, args=args, _reply=reply
+        )
         try:
             result = await command.handler(ctx)
         except Exception:
