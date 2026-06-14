@@ -41,12 +41,30 @@ docker run --rm ghcr.io/tahnok/ottobot:latest --tcp 192.168.1.50:5000
 ```
 
 A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the
-`command:` to match your device, then:
+`command:` and device path to match your hardware, then:
 
 ```bash
 docker compose up -d      # start the bot in the background
 docker compose logs -f    # follow its output
 ```
+
+The container runs as a non-root user, so it must be in the group that owns
+the serial device on the host. Check with `stat -c '%G %g' /dev/ttyUSB0`
+(typically `dialout`, GID 20) and set `group_add:` in the Compose file to
+that GID.
+
+USB devices can also enumerate under different names across reboots
+(`/dev/ttyUSB0`, `/dev/ttyUSB1`, ...). A udev rule pins a stable path. Find
+the adapter's attributes with `udevadm info -a -n /dev/ttyUSB0 | grep -E
+'idVendor|idProduct|serial'`, then create `/etc/udev/rules.d/99-meshcore.rules`
+on the host:
+
+```
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="meshcore"
+```
+
+Reload with `sudo udevadm control --reload && sudo udevadm trigger`, then
+point both `command:` and `devices:` at `/dev/meshcore`.
 
 To build the image from a local checkout instead of pulling it:
 
