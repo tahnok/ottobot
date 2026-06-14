@@ -30,14 +30,14 @@ A prebuilt image is published to the GitHub Container Registry on every push
 to `main`:
 
 ```bash
-docker run --rm ghcr.io/tahnok/ottobot:latest --tcp 192.168.1.50:5000
+docker run --rm --device /dev/ttyUSB0 ghcr.io/tahnok/ottobot:latest --serial /dev/ttyUSB0
 ```
 
-Pass the same connection flags you'd pass to `ottobot`. For a USB/serial
-device, pass it through to the container:
+Pass the same connection flags you'd pass to `ottobot`. To talk to a
+companion over the network instead of USB:
 
 ```bash
-docker run --rm --device /dev/ttyUSB0 ghcr.io/tahnok/ottobot:latest --serial /dev/ttyUSB0
+docker run --rm ghcr.io/tahnok/ottobot:latest --tcp 192.168.1.50:5000
 ```
 
 A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the

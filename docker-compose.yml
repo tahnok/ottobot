@@ -14,15 +14,15 @@ services:
     # build: .
     restart: unless-stopped
 
-    # ottobot needs exactly one transport. TCP is the simplest for a
-    # container — point it at a MeshCore companion reachable over the network
-    # (e.g. an ESP32 running the companion firmware in TCP/WiFi mode).
-    command: ["--tcp", "192.168.1.50:5000"]
+    # ottobot needs exactly one transport. Point it at a MeshCore companion
+    # device plugged into the host over USB, and pass that device through to
+    # the container. Adjust the port (e.g. /dev/ttyACM0) to match your host.
+    command: ["--serial", "/dev/ttyUSB0"]
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
 
-    # --- Serial-connected device (USB) ---------------------------------------
-    # To talk to a device plugged into the host over USB instead, replace the
-    # command above with the serial port and pass the device through:
+    # --- TCP-connected device ------------------------------------------------
+    # To talk to a companion over the network instead (e.g. an ESP32 running
+    # the firmware in TCP/WiFi mode), drop the `devices:` block above and use:
     #
-    # command: ["--serial", "/dev/ttyUSB0"]
-    # devices:
-    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    # command: ["--tcp", "192.168.1.50:5000"]
