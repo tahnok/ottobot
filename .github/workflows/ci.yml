@@ -43,6 +43,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # QEMU lets the amd64 runner build the arm64 image via emulation.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -71,6 +75,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          # Multiarch so the image runs on x86 servers and arm64 (e.g. Raspberry Pi).
+          platforms: linux/amd64,linux/arm64
           # Build on PRs to catch breakage, but only push on `push` events,
           # which the `on:` block scopes to the main branch and v* tags.
           push: ${{ github.event_name == 'push' }}
