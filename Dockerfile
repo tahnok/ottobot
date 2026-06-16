@@ -17,11 +17,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev
 
-# Now bring in the project itself and install it.
+# Now bring in the project itself and install it. --no-editable installs
+# ottobot into the venv's site-packages instead of linking back to /app/src;
+# the runtime stage copies only /app/.venv, so an editable link would dangle
+# and `import ottobot` would fail (ModuleNotFoundError: No module named 'ottobot').
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+    uv sync --locked --no-dev --no-editable
 
 # --- Runtime stage ---------------------------------------------------------
 # A bare Python image — no uv, no build tools — with just the venv copied in.
