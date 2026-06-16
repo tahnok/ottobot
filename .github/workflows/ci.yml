@@ -59,6 +59,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build a single-arch image we can load into the local daemon and run.
+      # (Multiarch images can't be `load`ed, so the smoke test builds amd64
+      # only; the layers are cached and reused by the multiarch build below.)
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ottobot:smoke-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Boot the freshly built container. `--help` runs the entrypoint, which
+      # imports ottobot.cli (and the whole command set) — catching breakage
+      # like a missing/unimportable ottobot package before we publish.
+      - name: Smoke test — container boots
+        run: docker run --rm ottobot:smoke-test --help
+
       - name: Compute image tags and labels
         id: meta
         uses: docker/metadata-action@v5
