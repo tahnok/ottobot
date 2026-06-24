@@ -46,6 +46,15 @@ point.
   it registers just that module against a fresh `MeshBot(name=...)` and dispatches
   test messages via `tests/helpers.py`'s `dm()`/`channel_msg()`/
   `ReplyRecorder`). Try it interactively with `uv run ottobot --simulate`.
+- **Adding a listener**: for code that should run on *every* message
+  regardless of prefix/command, mark a top-level coroutine with `@listener`
+  (from `ottobot.registry`) in a file under `commands/`. It takes
+  `ctx: Context` and may reply by returning a `str` or calling
+  `await ctx.reply(...)`; returning `None` stays silent. Listeners have no
+  name, never appear in `!help`, run before command dispatch, and one
+  raising never stops the others or the command. `MeshBot.listener` /
+  `add_listener` register them programmatically. A command file may also
+  define a listener, and a file with only a listener is fine too.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.

@@ -20,7 +20,7 @@ import pkgutil
 from types import ModuleType
 
 from ..bot import MeshBot
-from ..registry import Command, module_commands
+from ..registry import Command, module_commands, module_listeners
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +35,17 @@ def iter_command_module_names() -> list[str]:
 
 
 def register_module(bot: MeshBot, module: ModuleType) -> list[Command]:
-    """Register every @command-marked handler in *module* on *bot*.
+    """Register every @command and @listener handler in *module* on *bot*.
 
-    Returns the commands that were registered. Tests use this to load a
-    single command module against a fresh bot.
+    Returns the commands that were registered (listeners are nameless, so
+    they are not returned). Tests use this to load a single module against a
+    fresh bot.
     """
     commands = module_commands(module)
     for command in commands:
         bot.add_command(command)
+    for handler in module_listeners(module):
+        bot.add_listener(handler)
     return commands
 
 
@@ -58,10 +61,11 @@ def load_commands(bot: MeshBot) -> list[str]:
     loaded: list[str] = []
     for name in iter_command_module_names():
         module = importlib.import_module(f"{__name__}.{name}")
-        if not register_module(bot, module):
+        registered = register_module(bot, module)
+        if not registered and not module_listeners(module):
             raise TypeError(
                 f"command module {module.__name__!r} must define at least one "
-                "@command handler"
+                "@command or @listener handler"
             )
         loaded.append(name)
         logger.debug("loaded command module %s", name)

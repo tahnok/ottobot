@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import ReplyRecorder, channel_msg, dm
-from ottobot import Command, Context, MeshBot
+from ottobot import Command, Context, MeshBot, listener
 
 
 class TestParse:
@@ -162,6 +162,132 @@ class TestDispatch:
         handled = await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
         assert not handled
         assert reply.replies == []
+
+
+class TestListeners:
+    async def test_listener_runs_on_non_command_text(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        seen: list[str] = []
+
+        @bot.listener
+        async def watch(ctx: Context) -> None:
+            seen.append(ctx.message.text)
+
+        handled = await bot.dispatch(dm("just chatting"), reply)
+        assert seen == ["just chatting"]
+        # Listener observed but did not reply, and it is not a command.
+        assert not handled
+        assert reply.replies == []
+
+    async def test_listener_can_reply_to_any_message(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.listener
+        async def echo_back(ctx: Context) -> str:
+            return f"heard: {ctx.message.text}"
+
+        handled = await bot.dispatch(dm("hello"), reply)
+        # A listener reply counts as handled even with no command.
+        assert handled
+        assert reply.replies == ["heard: hello"]
+
+    async def test_listener_can_reply_directly(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.listener
+        async def chatty(ctx: Context) -> None:
+            await ctx.reply("one")
+            await ctx.reply("two")
+
+        await bot.dispatch(dm("hi"), reply)
+        assert reply.replies == ["one", "two"]
+
+    async def test_listener_runs_alongside_command(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.command("ping")
+        async def ping(ctx: Context) -> str:
+            return "pong"
+
+        @bot.listener
+        async def note(ctx: Context) -> str:
+            return "noted"
+
+        handled = await bot.dispatch(dm("!ping"), reply)
+        assert handled
+        # Listeners run first, then the command.
+        assert reply.replies == ["noted", "pong"]
+
+    async def test_listeners_run_in_registration_order(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.listener
+        async def first(ctx: Context) -> str:
+            return "first"
+
+        @bot.listener
+        async def second(ctx: Context) -> str:
+            return "second"
+
+        await bot.dispatch(dm("hi"), reply)
+        assert reply.replies == ["first", "second"]
+
+    async def test_listener_exception_does_not_break_dispatch(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.command("ping")
+        async def ping(ctx: Context) -> str:
+            return "pong"
+
+        @bot.listener
+        async def boom(ctx: Context) -> str:
+            raise RuntimeError("kaboom")
+
+        @bot.listener
+        async def survivor(ctx: Context) -> str:
+            return "still here"
+
+        handled = await bot.dispatch(dm("!ping"), reply)
+        assert handled
+        # The failing listener is swallowed; later listeners and the command
+        # still run, and no error reply is sent for the listener.
+        assert reply.replies == ["still here", "pong"]
+
+    async def test_listener_runs_on_channel_messages(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        @bot.listener
+        async def watch(ctx: Context) -> str:
+            return "saw it"
+
+        # No address needed: listeners see every channel message.
+        handled = await bot.dispatch(channel_msg("anything"), reply)
+        assert handled
+        assert reply.replies == ["saw it"]
+
+    async def test_listener_skipped_when_channels_disabled(
+        self, reply: ReplyRecorder
+    ) -> None:
+        bot = MeshBot(name="ottobot", respond_in_channels=False)
+
+        @bot.listener
+        async def watch(ctx: Context) -> str:
+            return "saw it"
+
+        handled = await bot.dispatch(channel_msg("anything"), reply)
+        assert not handled
+        assert reply.replies == []
+
+    def test_bare_listener_decorator_marks_handler(self) -> None:
+        bot = MeshBot(name="ottobot")
+
+        @listener
+        async def standalone(ctx: Context) -> None:
+            return None
+
+        bot.add_listener(standalone)
+        assert standalone in bot._listeners
 
 
 def _named_bot() -> MeshBot:

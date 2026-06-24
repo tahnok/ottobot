@@ -12,7 +12,13 @@ if TYPE_CHECKING:
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
 
+# A listener has the same shape as a command handler: it takes a Context and
+# may return a string to send as a reply (or None to stay silent). Unlike a
+# command it has no name and runs on *every* message, not just prefixed ones.
+MessageListener = Callable[["Context"], Awaitable[str | None]]
+
 _COMMAND_ATTR = "_meshbot_command"
+_LISTENER_ATTR = "_meshbot_listener"
 
 
 @dataclass
@@ -78,6 +84,41 @@ def module_commands(module: ModuleType) -> list[Command]:
         cmd
         for obj in vars(module).values()
         if (cmd := getattr(obj, _COMMAND_ATTR, None)) is not None
+        and getattr(obj, "__module__", None) == module.__name__
+    ]
+
+
+def listener(handler: MessageListener) -> MessageListener:
+    """Mark a module-level coroutine to run on *every* incoming message.
+
+    A listener runs for each message the bot handles, regardless of prefix
+    or command name, and may return a string to reply (or call
+    ``ctx.reply(...)``). It has no name and never appears in help. Used as a
+    bare decorator::
+
+        @listener
+        async def greet(ctx: Context) -> str | None:
+            if "hello" in ctx.message.text.lower():
+                return "hi there!"
+
+    Like @command, this only attaches metadata at import time; load_commands()
+    later collects marked listeners via module_listeners() and registers them.
+    """
+
+    setattr(handler, _LISTENER_ATTR, True)
+    return handler
+
+
+def module_listeners(module: ModuleType) -> list[MessageListener]:
+    """The @listener-marked coroutines defined in *module*, in definition order.
+
+    Mirrors module_commands(): handlers merely imported into the module are
+    excluded so importing another module's listener can't register it twice.
+    """
+    return [
+        obj
+        for obj in vars(module).values()
+        if getattr(obj, _LISTENER_ATTR, False)
         and getattr(obj, "__module__", None) == module.__name__
     ]
 
