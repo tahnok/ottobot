@@ -15,12 +15,12 @@ from ottobot.commands import (
 from ottobot.registry import command, module_commands, module_listeners
 
 
-def test_every_command_module_defines_a_command() -> None:
+def test_every_module_defines_a_command_or_listener() -> None:
     for name in iter_command_module_names():
         module = importlib.import_module(f"ottobot.commands.{name}")
-        assert module_commands(
+        assert module_commands(module) or module_listeners(
             module
-        ), f"{module.__name__} must define at least one @command handler"
+        ), f"{module.__name__} must define at least one @command or @listener handler"
 
 
 def test_load_commands_loads_all_modules() -> None:
