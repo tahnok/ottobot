@@ -6,6 +6,10 @@
 
 Then message the node "!help" (in a DM or on channel 0) to see commands.
 
+Pass --config ottobot.toml to make a TOML file the source of truth for the
+bot's name, channels, key pair, and radio params; those settings are pushed
+onto the device on startup. See ottobot.example.toml for the format.
+
 To try commands locally without a device or touching the mesh:
 
     ottobot --simulate
@@ -19,7 +23,8 @@ import logging
 
 from .bot import MeshBot
 from .commands import load_commands
-from .runner import MeshCoreRunner, connect
+from .config import BotConfig, load_config
+from .runner import MeshCoreRunner, apply_settings, connect
 from .simulator import Simulator
 
 
@@ -53,25 +58,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="NAME",
         help="bot name for channel addressing (default: the device's own name)",
     )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="TOML config file applied to the device on startup",
+    )
     return parser.parse_args(argv)
 
 
 async def run(args: argparse.Namespace) -> None:
+    config = load_config(args.config) if args.config else BotConfig()
     if args.simulate:
-        # No device to ask, so fall back to a default name unless pinned.
-        await Simulator(build_bot(name=args.name or "ottobot")).repl()
+        # No device to ask, so fall back to the config name or a default.
+        name = args.name or config.name or "ottobot"
+        await Simulator(build_bot(name=name)).repl()
         return
     mc = await connect(
         serial=args.serial, baudrate=args.baudrate, ble=args.ble, tcp=args.tcp
     )
     try:
-        # Pin the name with --name, otherwise take the device's own name so
-        # channel addressing tracks whatever the node advertises.
-        name = args.name or (mc.self_info or {}).get("name")
+        await apply_settings(mc, config)
+        # Pin the name with --name, then the config, otherwise take the
+        # device's own name so addressing tracks whatever the node advertises.
+        name = args.name or config.name or (mc.self_info or {}).get("name")
         if not name:
             raise SystemExit(
                 "could not determine the bot's name: the device reports none. "
-                "Pass --name to set one."
+                "Pass --name or set name in the config to set one."
             )
         runner = MeshCoreRunner(build_bot(name=name), mc)
         await runner.run_forever()

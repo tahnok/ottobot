@@ -5,7 +5,8 @@ import pytest
 from meshcore import EventType
 
 from ottobot import Context, MeshBot
-from ottobot.runner import MeshCoreRunner
+from ottobot.config import BotConfig, ChannelConfig, RadioConfig
+from ottobot.runner import MeshCoreRunner, apply_settings
 
 
 @dataclass
@@ -19,6 +20,11 @@ class FakeCommands:
         self.sent_msgs: list[tuple[dict[str, Any], str]] = []
         self.sent_chan_msgs: list[tuple[int, str]] = []
         self.fail_sends = False
+        # Records device-setting calls for apply_settings tests.
+        self.names: list[str] = []
+        self.private_keys: list[bytes] = []
+        self.channels: list[tuple[int, str, bytes | None]] = []
+        self.radios: list[tuple[float, float, int, int]] = []
 
     async def send_msg(self, contact: dict[str, Any], text: str) -> FakeEvent:
         if self.fail_sends:
@@ -29,6 +35,24 @@ class FakeCommands:
     async def send_chan_msg(self, channel_idx: int, text: str) -> FakeEvent:
         self.sent_chan_msgs.append((channel_idx, text))
         return FakeEvent(EventType.MSG_SENT, {"expected_ack": b"\x00"})
+
+    async def set_name(self, name: str) -> FakeEvent:
+        self.names.append(name)
+        return FakeEvent(EventType.OK)
+
+    async def import_private_key(self, key: bytes) -> FakeEvent:
+        self.private_keys.append(key)
+        return FakeEvent(EventType.OK)
+
+    async def set_channel(
+        self, channel_idx: int, channel_name: str, channel_secret: bytes | None = None
+    ) -> FakeEvent:
+        self.channels.append((channel_idx, channel_name, channel_secret))
+        return FakeEvent(EventType.OK)
+
+    async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> FakeEvent:
+        self.radios.append((freq, bw, sf, cr))
+        return FakeEvent(EventType.OK)
 
 
 class FakeMeshCore:
@@ -276,3 +300,38 @@ class TestChannelMessages:
         await runner.start()
         await mc.deliver_chan("alice: @[ottobot] !ping")
         assert mc.commands.sent_chan_msgs == []
+
+
+class TestApplySettings:
+    async def test_applies_every_field(self, mc: FakeMeshCore) -> None:
+        config = BotConfig(
+            name="ottobot",
+            private_key=b"\x01" * 64,
+            channels=(
+                ChannelConfig(0, "public"),
+                ChannelConfig(1, "private", b"\x02" * 16),
+            ),
+            radio=RadioConfig(freq=910.525, bw=250.0, sf=11, cr=5),
+        )
+        await apply_settings(mc, config)
+        assert mc.commands.names == ["ottobot"]
+        assert mc.commands.private_keys == [b"\x01" * 64]
+        assert mc.commands.channels == [
+            (0, "public", None),
+            (1, "private", b"\x02" * 16),
+        ]
+        assert mc.commands.radios == [(910.525, 250.0, 11, 5)]
+
+    async def test_skips_absent_fields(self, mc: FakeMeshCore) -> None:
+        await apply_settings(mc, BotConfig(name="ottobot"))
+        assert mc.commands.names == ["ottobot"]
+        assert mc.commands.private_keys == []
+        assert mc.commands.channels == []
+        assert mc.commands.radios == []
+
+    async def test_empty_config_applies_nothing(self, mc: FakeMeshCore) -> None:
+        await apply_settings(mc, BotConfig())
+        assert mc.commands.names == []
+        assert mc.commands.private_keys == []
+        assert mc.commands.channels == []
+        assert mc.commands.radios == []

@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 dist/
 *.egg-info/
+
+# Local config holds the bot's private key; keep it out of git.
+ottobot.toml

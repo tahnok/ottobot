@@ -44,6 +44,25 @@ By default the bot uses the connected device's own advertised name; pass
 the name in channels with `@command(..., requires_address=False)`, for
 commands meant to react to any channel message.
 
+## Config file
+
+A TOML config file can act as the source of truth for the device's
+**name**, **channels**, **key pair**, and **radio params**. On startup the
+bot connects, then pushes whatever the file specifies onto the radio, so the
+device always matches the file — handy for reproducing a node after a
+re-flash or device swap. Connection flags (`--serial`/`--ble`/`--tcp`) stay
+on the command line.
+
+```bash
+uv run ottobot --serial /dev/ttyUSB0 --config ottobot.toml
+```
+
+Copy [`ottobot.example.toml`](ottobot.example.toml) to `ottobot.toml` and
+edit it. Every field is optional; anything you omit is left untouched on the
+device. The name precedence is `--name` > config `name` > the device's own
+advertised name. Because the file can hold the bot's private key, the real
+`ottobot.toml` is gitignored — keep it out of version control.
+
 ## Running with Docker
 
 A prebuilt image is published to the GitHub Container Registry on every push
