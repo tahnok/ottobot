@@ -79,6 +79,16 @@ companion over the network instead of USB:
 docker run --rm ghcr.io/tahnok/ottobot:latest --tcp 192.168.1.50:5000
 ```
 
+To use a [config file](#config-file), bind-mount it into the container and
+point `--config` at the mount path (the container's working directory is
+`/app`):
+
+```bash
+docker run --rm --device /dev/ttyUSB0 \
+  -v "$PWD/ottobot.toml:/app/ottobot.toml:ro" \
+  ghcr.io/tahnok/ottobot:latest --serial /dev/ttyUSB0 --config /app/ottobot.toml
+```
+
 A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the
 `command:` and device path to match your hardware, then:
 
@@ -86,6 +96,10 @@ A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the
 docker compose up -d      # start the bot in the background
 docker compose logs -f    # follow its output
 ```
+
+The Compose file already wires up the config mount; copy
+`ottobot.example.toml` to `ottobot.toml` next to it first (or drop the
+`--config` flag and `volumes:` block to run without one).
 
 The container runs as a non-root user, so it must be in the group that owns
 the serial device on the host. Check with `stat -c '%G %g' /dev/ttyUSB0`
