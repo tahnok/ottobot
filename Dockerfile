@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # --- Runtime stage ---------------------------------------------------------
 # A bare Python image — no uv, no build tools — with just the venv copied in.
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # Run as an unprivileged user.
 RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
