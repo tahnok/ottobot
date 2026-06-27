@@ -15,9 +15,43 @@ from typing import Any
 from meshcore import EventType, MeshCore
 
 from .bot import MeshBot
+from .config import BotConfig
 from .context import IncomingMessage
 
 logger = logging.getLogger(__name__)
+
+
+async def _apply(description: str, result: Any) -> None:
+    """Log the outcome of one device-setting command."""
+    if result.type == EventType.ERROR:
+        logger.warning("failed to %s: %r", description, result.payload)
+    else:
+        logger.info("applied %s", description)
+
+
+async def apply_settings(mc: Any, config: BotConfig) -> None:
+    """Push the config's name, channels, key pair, and radio onto the device.
+
+    Each field is optional; anything left unset in the config is skipped so
+    the device keeps its current value.
+    """
+    if config.name:
+        await _apply(f"name={config.name!r}", await mc.commands.set_name(config.name))
+    if config.private_key is not None:
+        await _apply(
+            "private key", await mc.commands.import_private_key(config.private_key)
+        )
+    for channel in config.channels:
+        await _apply(
+            f"channel {channel.index} name={channel.name!r}",
+            await mc.commands.set_channel(channel.index, channel.name, channel.secret),
+        )
+    if config.radio is not None:
+        r = config.radio
+        await _apply(
+            f"radio freq={r.freq} bw={r.bw} sf={r.sf} cr={r.cr}",
+            await mc.commands.set_radio(r.freq, r.bw, r.sf, r.cr),
+        )
 
 
 async def connect(

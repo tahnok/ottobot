@@ -17,9 +17,19 @@ services:
     # ottobot needs exactly one transport. Point it at a MeshCore companion
     # device plugged into the host over USB, and pass that device through to
     # the container. Adjust the port (e.g. /dev/ttyACM0) to match your host.
-    command: ["--serial", "/dev/ttyUSB0"]
+    #
+    # --config makes a TOML file the source of truth for the bot's name,
+    # channels, key pair, and radio params (pushed onto the device on
+    # startup). It lives on the host and is bind-mounted in via volumes:
+    # below — copy ottobot.example.toml to ottobot.toml next to this file
+    # first. To run without a config, drop the --config flag and the
+    # volumes: block.
+    command: ["--serial", "/dev/ttyUSB0", "--config", "/app/ottobot.toml"]
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
+    volumes:
+      # Read-only: the bot only reads the config, and it holds the private key.
+      - "./ottobot.toml:/app/ottobot.toml:ro"
     # The container runs as a non-root user, so it needs to belong to the
     # group that owns the serial device on the host (usually `dialout`, GID
     # 20 on Debian/Ubuntu). Run `stat -c '%G %g' /dev/ttyUSB0` on the host to
@@ -31,4 +41,4 @@ services:
     # To talk to a companion over the network instead (e.g. an ESP32 running
     # the firmware in TCP/WiFi mode), drop the `devices:` block above and use:
     #
-    # command: ["--tcp", "192.168.1.50:5000"]
+    # command: ["--tcp", "192.168.1.50:5000", "--config", "/app/ottobot.toml"]

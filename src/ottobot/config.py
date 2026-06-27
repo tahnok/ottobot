@@ -1,0 +1,119 @@
+"""Load Ottobot's TOML config: the source of truth for device settings.
+
+The config file pins the bot's advertised name, channels, key pair, and
+(optionally) radio parameters. On startup these are pushed onto the radio so
+the device always matches the file — see ``runner.apply_settings``.
+
+This module only parses and validates; it imports nothing from meshcore so
+it stays easy to unit-test. Example file:
+
+    name = "ottobot"
+    private_key = "<128 hex chars>"   # optional, 64-byte key pair
+
+    [[channels]]
+    index = 0
+    name = "public"
+    # secret = "<32 hex chars>"       # optional 16-byte secret
+
+    [radio]
+    freq = 910.525
+    bw = 250.0
+    sf = 11
+    cr = 5
+"""
+
+from __future__ import annotations
+
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+PRIVATE_KEY_LEN = 64
+CHANNEL_SECRET_LEN = 16
+
+
+@dataclass(frozen=True)
+class ChannelConfig:
+    index: int
+    name: str
+    # 16-byte secret; None means the device derives it from the name.
+    secret: bytes | None = None
+
+
+@dataclass(frozen=True)
+class RadioConfig:
+    freq: float
+    bw: float
+    sf: int
+    cr: int
+
+
+@dataclass(frozen=True)
+class BotConfig:
+    name: str | None = None
+    private_key: bytes | None = None
+    channels: tuple[ChannelConfig, ...] = ()
+    radio: RadioConfig | None = None
+
+
+def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} is not valid hex: {exc}") from exc
+    if len(raw) != expected_len:
+        raise ValueError(
+            f"{field_name} must be {expected_len} bytes "
+            f"({expected_len * 2} hex chars), got {len(raw)}"
+        )
+    return raw
+
+
+def _parse_channel(raw: dict) -> ChannelConfig:
+    if "index" not in raw or "name" not in raw:
+        raise ValueError("each [[channels]] entry needs an index and a name")
+    secret_hex = raw.get("secret")
+    secret = (
+        _decode_hex(secret_hex, "channel secret", CHANNEL_SECRET_LEN)
+        if secret_hex is not None
+        else None
+    )
+    return ChannelConfig(index=int(raw["index"]), name=str(raw["name"]), secret=secret)
+
+
+def _parse_radio(raw: dict) -> RadioConfig:
+    missing = [k for k in ("freq", "bw", "sf", "cr") if k not in raw]
+    if missing:
+        raise ValueError(f"[radio] is missing required keys: {', '.join(missing)}")
+    return RadioConfig(
+        freq=float(raw["freq"]),
+        bw=float(raw["bw"]),
+        sf=int(raw["sf"]),
+        cr=int(raw["cr"]),
+    )
+
+
+def parse_config(data: dict) -> BotConfig:
+    """Build a BotConfig from already-parsed TOML data."""
+    private_key_hex = data.get("private_key")
+    private_key = (
+        _decode_hex(private_key_hex, "private_key", PRIVATE_KEY_LEN)
+        if private_key_hex is not None
+        else None
+    )
+    channels = tuple(_parse_channel(c) for c in data.get("channels", ()))
+    radio = _parse_radio(data["radio"]) if "radio" in data else None
+    name = data.get("name")
+    return BotConfig(
+        name=str(name) if name is not None else None,
+        private_key=private_key,
+        channels=channels,
+        radio=radio,
+    )
+
+
+def load_config(path: str | Path) -> BotConfig:
+    """Read and validate the TOML config at *path*."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return parse_config(data)

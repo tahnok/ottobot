@@ -44,6 +44,25 @@ By default the bot uses the connected device's own advertised name; pass
 the name in channels with `@command(..., requires_address=False)`, for
 commands meant to react to any channel message.
 
+## Config file
+
+A TOML config file can act as the source of truth for the device's
+**name**, **channels**, **key pair**, and **radio params**. On startup the
+bot connects, then pushes whatever the file specifies onto the radio, so the
+device always matches the file — handy for reproducing a node after a
+re-flash or device swap. Connection flags (`--serial`/`--ble`/`--tcp`) stay
+on the command line.
+
+```bash
+uv run ottobot --serial /dev/ttyUSB0 --config ottobot.toml
+```
+
+Copy [`ottobot.example.toml`](ottobot.example.toml) to `ottobot.toml` and
+edit it. Every field is optional; anything you omit is left untouched on the
+device. The name precedence is `--name` > config `name` > the device's own
+advertised name. Because the file can hold the bot's private key, the real
+`ottobot.toml` is gitignored — keep it out of version control.
+
 ## Running with Docker
 
 A prebuilt image is published to the GitHub Container Registry on every push
@@ -60,6 +79,16 @@ companion over the network instead of USB:
 docker run --rm ghcr.io/tahnok/ottobot:latest --tcp 192.168.1.50:5000
 ```
 
+To use a [config file](#config-file), bind-mount it into the container and
+point `--config` at the mount path (the container's working directory is
+`/app`):
+
+```bash
+docker run --rm --device /dev/ttyUSB0 \
+  -v "$PWD/ottobot.toml:/app/ottobot.toml:ro" \
+  ghcr.io/tahnok/ottobot:latest --serial /dev/ttyUSB0 --config /app/ottobot.toml
+```
+
 A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the
 `command:` and device path to match your hardware, then:
 
@@ -67,6 +96,10 @@ A sample [`docker-compose.yml`](docker-compose.yml) is included — edit the
 docker compose up -d      # start the bot in the background
 docker compose logs -f    # follow its output
 ```
+
+The Compose file already wires up the config mount; copy
+`ottobot.example.toml` to `ottobot.toml` next to it first (or drop the
+`--config` flag and `volumes:` block to run without one).
 
 The container runs as a non-root user, so it must be in the group that owns
 the serial device on the host. Check with `stat -c '%G %g' /dev/ttyUSB0`
