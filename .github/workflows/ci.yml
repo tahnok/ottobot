@@ -63,7 +63,7 @@ jobs:
       # (Multiarch images can't be `load`ed, so the smoke test builds amd64
       # only; the layers are cached and reused by the multiarch build below.)
       - name: Build image for smoke test
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -91,7 +91,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           # Multiarch so the image runs on x86 servers and arm64 (e.g. Raspberry Pi).
