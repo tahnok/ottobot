@@ -128,12 +128,22 @@ class MeshCoreRunner:
             raw=payload,
         )
 
+        logger.info(
+            "DM from %s (%s) [%s]: %r",
+            contact.get("adv_name"),
+            prefix,
+            message.path_description,
+            message.text,
+        )
+
         async def reply(text: str) -> None:
             result = await self.mc.commands.send_msg(contact, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send DM reply: %r", result.payload)
 
-        await self.bot.dispatch(message, reply)
+        handled = await self.bot.dispatch(message, reply)
+        if not handled:
+            logger.debug("DM ignored (not a command for this bot)")
 
     async def _on_channel_msg(self, event: Any) -> None:
         payload = event.payload
@@ -158,12 +168,22 @@ class MeshCoreRunner:
             raw=payload,
         )
 
+        logger.info(
+            "channel %d msg from %s [%s]: %r",
+            channel_idx,
+            sender_name,
+            message.path_description,
+            text,
+        )
+
         async def reply(text: str) -> None:
             result = await self.mc.commands.send_chan_msg(channel_idx, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)
 
-        await self.bot.dispatch(message, reply)
+        handled = await self.bot.dispatch(message, reply)
+        if not handled:
+            logger.debug("channel msg ignored (bot not addressed or not a command)")
 
     async def _resolve_contact(self, prefix: str | None) -> dict[str, Any] | None:
         if not prefix:

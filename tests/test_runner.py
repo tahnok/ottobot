@@ -216,6 +216,20 @@ class TestDirectMessages:
         await mc.deliver_dm("hello bot")
         assert mc.commands.sent_msgs == []
 
+    async def test_received_dm_is_logged_even_when_ignored(
+        self,
+        runner: MeshCoreRunner,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with caplog.at_level("INFO", logger="ottobot.runner"):
+            await mc.deliver_dm("hello bot")
+        assert mc.commands.sent_msgs == []
+        assert any(
+            "DM from alice" in r.message and "hello bot" in r.message
+            for r in caplog.records
+        )
+
     async def test_failed_send_does_not_raise(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
@@ -274,6 +288,20 @@ class TestChannelMessages:
         # On a channel the bot only answers when addressed by name.
         await mc.deliver_chan("alice: !ping")
         assert mc.commands.sent_chan_msgs == []
+
+    async def test_received_channel_msg_is_logged_even_when_ignored(
+        self,
+        runner: MeshCoreRunner,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with caplog.at_level("INFO", logger="ottobot.runner"):
+            await mc.deliver_chan("alice: just chatting", channel_idx=2)
+        assert mc.commands.sent_chan_msgs == []
+        assert any(
+            "channel 2 msg from alice" in r.message and "just chatting" in r.message
+            for r in caplog.records
+        )
 
     async def test_channel_path_is_passed_through(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
