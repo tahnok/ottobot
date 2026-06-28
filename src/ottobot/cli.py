@@ -27,8 +27,6 @@ from .config import BotConfig, load_config
 from .runner import MeshCoreRunner, apply_settings, connect
 from .simulator import Simulator
 
-logger = logging.getLogger(__name__)
-
 
 def build_bot(name: str, prefix: str = "!") -> MeshBot:
     """A MeshBot named *name* with every command in ottobot.commands loaded."""
@@ -68,18 +66,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def log_channels(name: str, config: BotConfig) -> None:
-    """Log the bot's name and the channels it's configured for, on startup."""
-    if config.channels:
-        summary = ", ".join(
-            f"{c.index}:{c.name}" + ("" if c.secret is None else " (custom secret)")
-            for c in config.channels
-        )
-        logger.info("bot %r configured for channels %s", name, summary)
-    else:
-        logger.info("bot %r: no channels configured", name)
-
-
 async def run(args: argparse.Namespace) -> None:
     config = load_config(args.config) if args.config else BotConfig()
     if config.log_level:
@@ -102,7 +88,6 @@ async def run(args: argparse.Namespace) -> None:
                 "could not determine the bot's name: the device reports none. "
                 "Pass --name or set name in the config to set one."
             )
-        log_channels(name, config)
         runner = MeshCoreRunner(build_bot(name=name), mc)
         await runner.run_forever()
     finally:

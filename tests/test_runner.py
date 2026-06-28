@@ -6,7 +6,7 @@ from meshcore import EventType
 
 from ottobot import Context, MeshBot
 from ottobot.config import BotConfig, ChannelConfig, RadioConfig
-from ottobot.runner import MeshCoreRunner, apply_settings
+from ottobot.runner import MeshCoreRunner, apply_settings, fetch_channels
 
 
 @dataclass
@@ -25,6 +25,21 @@ class FakeCommands:
         self.private_keys: list[bytes] = []
         self.channels: list[tuple[int, str, bytes | None]] = []
         self.radios: list[tuple[float, float, int, int]] = []
+        # Channels the fake device reports back via get_channel, keyed by
+        # index; each value is the CHANNEL_INFO-style name. Empty by default.
+        self.device_channels: dict[int, str] = {}
+
+    async def get_channel(self, channel_idx: int) -> FakeEvent:
+        name = self.device_channels.get(channel_idx, "")
+        return FakeEvent(
+            EventType.CHANNEL_INFO,
+            {
+                "channel_idx": channel_idx,
+                "channel_name": name,
+                "channel_secret": b"\x00" * 16,
+                "channel_hash": f"{channel_idx:02x}",
+            },
+        )
 
     async def send_msg(self, contact: dict[str, Any], text: str) -> FakeEvent:
         if self.fail_sends:
@@ -65,7 +80,11 @@ class FakeMeshCore:
         self.callbacks: dict[EventType, Any] = {}
         # keyed by pubkey prefix, like get_contact_by_key_prefix expects
         self._contacts = contacts or {}
-        self.self_info = self_info if self_info is not None else {"name": "ottobot"}
+        self.self_info = (
+            self_info
+            if self_info is not None
+            else {"name": "ottobot", "max_channels": 4}
+        )
         self.ensure_contacts_calls = 0
         self.fetching = False
 
@@ -187,6 +206,31 @@ class TestLifecycle:
         await runner.stop()
         assert mc.callbacks == {}
         assert not mc.fetching
+
+    async def test_start_logs_device_channels_from_radio(
+        self,
+        bot: MeshBot,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        mc.commands.device_channels = {0: "public", 2: "private"}
+        with caplog.at_level("INFO", logger="ottobot.runner"):
+            await MeshCoreRunner(bot, mc).start()
+        messages = "\n".join(r.message for r in caplog.records)
+        # Configured slots are reported; the empty ones (1, 3) are skipped.
+        assert "0:public" in messages
+        assert "2:private" in messages
+        assert "1:" not in messages
+
+    async def test_start_notes_when_no_channels_configured(
+        self,
+        bot: MeshBot,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with caplog.at_level("INFO", logger="ottobot.runner"):
+            await MeshCoreRunner(bot, mc).start()
+        assert any("no channels configured" in r.message for r in caplog.records)
 
 
 class TestDirectMessages:
@@ -328,6 +372,28 @@ class TestChannelMessages:
         await runner.start()
         await mc.deliver_chan("alice: @[ottobot] !ping")
         assert mc.commands.sent_chan_msgs == []
+
+
+class TestFetchChannels:
+    async def test_returns_only_populated_slots(self, mc: FakeMeshCore) -> None:
+        mc.commands.device_channels = {0: "public", 2: "private"}
+        channels = await fetch_channels(mc)
+        assert [(c["channel_idx"], c["channel_name"]) for c in channels] == [
+            (0, "public"),
+            (2, "private"),
+        ]
+
+    async def test_honours_device_max_channels(self, mc: FakeMeshCore) -> None:
+        # max_channels is 4, so a channel at index 5 is never probed.
+        mc.commands.device_channels = {0: "public", 5: "unreachable"}
+        channels = await fetch_channels(mc)
+        assert [c["channel_name"] for c in channels] == ["public"]
+
+    async def test_falls_back_when_device_omits_max_channels(self) -> None:
+        mc = FakeMeshCore(self_info={"name": "ottobot"})
+        mc.commands.device_channels = {0: "public"}
+        channels = await fetch_channels(mc)
+        assert [c["channel_name"] for c in channels] == ["public"]
 
 
 class TestApplySettings:
