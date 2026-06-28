@@ -31,6 +31,6 @@ name = "public"
 # values are how you pin a "region" — set them to your local mesh's preset.
 [radio]
 freq = 910.525
-bw = 250.0
-sf = 11
+bw = 62.5
+sf = 7
 cr = 5

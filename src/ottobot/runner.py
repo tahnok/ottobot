@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from meshcore import EventType, MeshCore
+from meshcore.events import Event, Subscription
 
 from .bot import MeshBot
 from .config import BotConfig
@@ -23,8 +25,55 @@ logger = logging.getLogger(__name__)
 # Probed when the device doesn't report its own max_channels (older firmware).
 DEFAULT_MAX_CHANNELS = 8
 
+# MeshCore's built-in "public" channel uses this fixed, network-wide key
+# (base64 izOH6cXN6mrJ5e26oRXNcg==), NOT one derived from its name. The
+# meshcore library's set_channel() falls back to sha256(name)[:16] for any
+# secret-less channel, which is right for "#hashtag" channels but wrong for
+# "public" — a device keyed that way silently fails to decrypt all public
+# traffic. We substitute the real key here so a secret-less "public" works.
+PUBLIC_CHANNEL_NAME = "public"
+PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 
-async def fetch_channels(mc: Any) -> list[dict[str, Any]]:
+
+class _Commands(Protocol):
+    """The ``mc.commands`` methods the runner calls."""
+
+    async def get_channel(self, channel_idx: int) -> Event: ...
+    async def set_name(self, name: str) -> Event: ...
+    async def import_private_key(self, key: bytes) -> Event: ...
+    async def set_channel(
+        self, channel_idx: int, channel_name: str, channel_secret: Any = ...
+    ) -> Event: ...
+    async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> Event: ...
+    async def send_msg(self, contact: dict[str, Any], text: str) -> Event: ...
+    async def send_chan_msg(self, channel_idx: int, text: str) -> Event: ...
+
+
+class MeshCoreLike(Protocol):
+    """The slice of ``meshcore.MeshCore`` the runner depends on.
+
+    Both the real ``MeshCore`` and the tests' ``FakeMeshCore`` satisfy this,
+    so the runner is typed without naming the concrete class (and without the
+    permissive ``Any`` that hid mistakes at the call sites below).
+    """
+
+    @property
+    def commands(self) -> _Commands: ...
+
+    @property
+    def self_info(self) -> dict[str, Any] | None: ...
+
+    def subscribe(
+        self, event_type: EventType, callback: Callable[[Event], Any]
+    ) -> Any: ...
+    def unsubscribe(self, subscription: Any) -> None: ...
+    async def ensure_contacts(self) -> bool: ...
+    def get_contact_by_key_prefix(self, prefix: str) -> dict[str, Any] | None: ...
+    async def start_auto_message_fetching(self) -> Any: ...
+    async def stop_auto_message_fetching(self) -> Any: ...
+
+
+async def fetch_channels(mc: MeshCoreLike) -> list[dict[str, Any]]:
     """Read the channels actually configured on the device.
 
     Probes each channel slot (up to the device's reported ``max_channels``,
@@ -46,7 +95,7 @@ async def fetch_channels(mc: Any) -> list[dict[str, Any]]:
     return channels
 
 
-async def _apply(description: str, result: Any) -> None:
+async def _apply(description: str, result: Event) -> None:
     """Log the outcome of one device-setting command."""
     if result.type == EventType.ERROR:
         logger.warning("failed to %s: %r", description, result.payload)
@@ -54,7 +103,7 @@ async def _apply(description: str, result: Any) -> None:
         logger.info("applied %s", description)
 
 
-async def apply_settings(mc: Any, config: BotConfig) -> None:
+async def apply_settings(mc: MeshCoreLike, config: BotConfig) -> None:
     """Push the config's name, channels, key pair, and radio onto the device.
 
     Each field is optional; anything left unset in the config is skipped so
@@ -67,9 +116,12 @@ async def apply_settings(mc: Any, config: BotConfig) -> None:
             "private key", await mc.commands.import_private_key(config.private_key)
         )
     for channel in config.channels:
+        secret = channel.secret
+        if secret is None and channel.name.lower() == PUBLIC_CHANNEL_NAME:
+            secret = PUBLIC_CHANNEL_KEY
         await _apply(
             f"channel {channel.index} name={channel.name!r}",
-            await mc.commands.set_channel(channel.index, channel.name, channel.secret),
+            await mc.commands.set_channel(channel.index, channel.name, secret),
         )
     if config.radio is not None:
         r = config.radio
@@ -104,10 +156,10 @@ async def connect(
 class MeshCoreRunner:
     """Runs a MeshBot against a connected meshcore.MeshCore instance."""
 
-    def __init__(self, bot: MeshBot, meshcore: Any) -> None:
+    def __init__(self, bot: MeshBot, meshcore: MeshCoreLike) -> None:
         self.bot = bot
         self.mc = meshcore
-        self._subscriptions: list[Any] = []
+        self._subscriptions: list[Subscription] = []
 
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
@@ -153,7 +205,7 @@ class MeshCoreRunner:
         finally:
             await self.stop()
 
-    async def _on_contact_msg(self, event: Any) -> None:
+    async def _on_contact_msg(self, event: Event) -> None:
         payload = event.payload
         prefix = payload.get("pubkey_prefix")
         contact = await self._resolve_contact(prefix)
@@ -185,7 +237,7 @@ class MeshCoreRunner:
 
         await self.bot.dispatch(message, reply)
 
-    async def _on_channel_msg(self, event: Any) -> None:
+    async def _on_channel_msg(self, event: Event) -> None:
         payload = event.payload
         channel_idx = payload.get("channel_idx", 0)
         # Channel messages carry no sender key; by MeshCore convention the

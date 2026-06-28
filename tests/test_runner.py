@@ -1,18 +1,22 @@
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from meshcore import EventType
+from meshcore.events import Event
 
 from ottobot import Context, MeshBot
 from ottobot.config import BotConfig, ChannelConfig, RadioConfig
-from ottobot.runner import MeshCoreRunner, apply_settings, fetch_channels
+from ottobot.runner import (
+    PUBLIC_CHANNEL_KEY,
+    MeshCoreRunner,
+    apply_settings,
+    fetch_channels,
+)
 
 
-@dataclass
-class FakeEvent:
-    type: EventType
-    payload: Any = None
+class FakeEvent(Event):
+    def __init__(self, type: EventType, payload: Any = None) -> None:
+        super().__init__(type, payload)
 
 
 class FakeCommands:
@@ -411,10 +415,36 @@ class TestApplySettings:
         assert mc.commands.names == ["ottobot"]
         assert mc.commands.private_keys == [b"\x01" * 64]
         assert mc.commands.channels == [
-            (0, "public", None),
+            # A secret-less "public" channel gets MeshCore's fixed public key.
+            (0, "public", PUBLIC_CHANNEL_KEY),
             (1, "private", b"\x02" * 16),
         ]
         assert mc.commands.radios == [(910.525, 250.0, 11, 5)]
+
+    async def test_public_channel_gets_canonical_key_when_secret_omitted(
+        self, mc: FakeMeshCore
+    ) -> None:
+        # "Public" (any case) with no secret must use MeshCore's fixed key,
+        # not the sha256(name) the meshcore library would otherwise derive.
+        config = BotConfig(channels=(ChannelConfig(0, "Public"),))
+        await apply_settings(mc, config)
+        assert mc.commands.channels == [(0, "Public", PUBLIC_CHANNEL_KEY)]
+
+    async def test_explicit_public_secret_is_not_overridden(
+        self, mc: FakeMeshCore
+    ) -> None:
+        config = BotConfig(channels=(ChannelConfig(0, "public", b"\x03" * 16),))
+        await apply_settings(mc, config)
+        assert mc.commands.channels == [(0, "public", b"\x03" * 16)]
+
+    async def test_hashtag_channel_keeps_name_derivation(
+        self, mc: FakeMeshCore
+    ) -> None:
+        # "#hashtag" channels are left to the meshcore library to derive
+        # (passed through as None), which matches the rest of the mesh.
+        config = BotConfig(channels=(ChannelConfig(0, "#testing"),))
+        await apply_settings(mc, config)
+        assert mc.commands.channels == [(0, "#testing", None)]
 
     async def test_skips_absent_fields(self, mc: FakeMeshCore) -> None:
         await apply_settings(mc, BotConfig(name="ottobot"))
