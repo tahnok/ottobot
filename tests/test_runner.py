@@ -253,20 +253,20 @@ class TestChannelMessages:
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
         await mc.deliver_chan("alice: ottobot !ping", channel_idx=2)
-        assert mc.commands.sent_chan_msgs == [(2, "ottobot: pong")]
+        assert mc.commands.sent_chan_msgs == [(2, "pong")]
 
     async def test_app_mention_addresses_the_bot(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
         # As the MeshCore app sends it: "Sender: @[Bot] !command".
         await mc.deliver_chan("alice: @[ottobot] !ping", channel_idx=2)
-        assert mc.commands.sent_chan_msgs == [(2, "ottobot: pong")]
+        assert mc.commands.sent_chan_msgs == [(2, "pong")]
 
     async def test_sender_name_parsed_from_text_convention(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
         await mc.deliver_chan("alice: ottobot !whoami")
-        assert mc.commands.sent_chan_msgs == [(0, "ottobot: alice")]
+        assert mc.commands.sent_chan_msgs == [(0, "alice")]
 
     async def test_text_without_name_prefix_is_ignored(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
@@ -279,35 +279,13 @@ class TestChannelMessages:
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
         await mc.deliver_chan("alice: ottobot !path", path_len=255)
-        assert mc.commands.sent_chan_msgs == [(0, "ottobot: direct")]
+        assert mc.commands.sent_chan_msgs == [(0, "direct")]
 
     async def test_channel_exposes_raw_payload(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
         await mc.deliver_chan("alice: ottobot !raw", channel_idx=2)
-        assert mc.commands.sent_chan_msgs == [(2, "ottobot: None 2")]
-
-    async def test_channel_reply_is_prefixed_so_a_colon_survives_round_trip(
-        self, mc: FakeMeshCore
-    ) -> None:
-        # A reply whose body contains a colon must stay intact when another
-        # node re-parses it with the "Name: message" convention.
-        bot = MeshBot(name="ottobot")
-
-        @bot.command("time")
-        async def time(ctx: Context) -> str:
-            return "10:30"
-
-        runner = MeshCoreRunner(bot, mc)
-        await runner.start()
-        await mc.deliver_chan("alice: ottobot !time")
-        assert mc.commands.sent_chan_msgs == [(0, "ottobot: 10:30")]
-        # Re-parsing it the way _on_channel_msg parses incoming text keeps
-        # the body whole and attributes it to the bot.
-        sent_text = mc.commands.sent_chan_msgs[0][1]
-        name, _, body = sent_text.partition(":")
-        assert name == "ottobot"
-        assert body.strip() == "10:30"
+        assert mc.commands.sent_chan_msgs == [(2, "None 2")]
 
     async def test_channel_messages_ignored_when_bot_disabled_for_channels(
         self, mc: FakeMeshCore
