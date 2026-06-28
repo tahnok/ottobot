@@ -1,4 +1,5 @@
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -58,6 +59,15 @@ def test_name_only() -> None:
     assert config.name == "bot"
     assert config.channels == ()
     assert config.radio is None
+
+
+def test_database_parses_to_a_path() -> None:
+    config = parse('database = "/data/ottobot.db"')
+    assert config.database == Path("/data/ottobot.db")
+
+
+def test_database_defaults_to_none() -> None:
+    assert parse("").database is None
 
 
 def test_bad_private_key_hex() -> None:

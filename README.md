@@ -63,6 +63,12 @@ device. The name precedence is `--name` > config `name` > the device's own
 advertised name. Because the file can hold the bot's private key, the real
 `ottobot.toml` is gitignored — keep it out of version control.
 
+The config also has an optional `database` key for the sqlite file stateful
+sinks use (the welcome sink greets each channel name once and remembers who
+it has seen there). It defaults to `ottobot.db` in the working directory; in
+Docker, set it to `/data/ottobot.db` so it persists on the bind-mounted
+`./data` dir.
+
 ## Running with Docker
 
 A prebuilt image is published to the GitHub Container Registry on every push

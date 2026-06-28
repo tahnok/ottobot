@@ -59,6 +59,9 @@ class BotConfig:
     radio: RadioConfig | None = None
     # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
     log_level: str | None = None
+    # Path to the sqlite file stateful sinks (e.g. the welcome sink) use.
+    # None means cli falls back to its default.
+    database: Path | None = None
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -119,12 +122,15 @@ def parse_config(data: dict) -> BotConfig:
     name = data.get("name")
     log_level_raw = data.get("log_level")
     log_level = _parse_log_level(log_level_raw) if log_level_raw is not None else None
+    database = data.get("database")
+
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
         channels=channels,
         radio=radio,
         log_level=log_level,
+        database=Path(database) if database is not None else None,
     )
 
 
