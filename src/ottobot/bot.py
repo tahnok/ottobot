@@ -10,12 +10,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
 
 from .config import BotConfig
 from .registry import (
     Command,
     CommandHandler,
     CommandRegistry,
+    OnStart,
     ScheduledTask,
     Sink,
     SinkRegistry,
@@ -61,6 +63,7 @@ class MeshBot:
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
         self.task_registry = TaskRegistry()
+        self._on_start: list[OnStart] = []
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -116,6 +119,14 @@ class MeshBot:
 
     def add_task(self, task: ScheduledTask) -> None:
         self.task_registry.register(task)
+
+    def add_on_start(self, hook: OnStart) -> None:
+        self._on_start.append(hook)
+
+    async def setup(self) -> None:
+        """Run every registered @on_start hook once, before handling messages."""
+        for hook in self._on_start:
+            await hook.handler(self)
 
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
