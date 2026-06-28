@@ -159,7 +159,11 @@ class MeshCoreRunner:
         )
 
         async def reply(text: str) -> None:
-            result = await self.mc.commands.send_chan_msg(channel_idx, text)
+            # Follow the same "Name: message" convention we parse on the way
+            # in, so other clients attribute the reply to the bot (and don't
+            # misread a colon in the body as a sender/message split).
+            prefixed = f"{self.bot.name}: {text}"
+            result = await self.mc.commands.send_chan_msg(channel_idx, prefixed)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)
 
