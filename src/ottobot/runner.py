@@ -20,6 +20,31 @@ from .context import IncomingMessage
 
 logger = logging.getLogger(__name__)
 
+# Probed when the device doesn't report its own max_channels (older firmware).
+DEFAULT_MAX_CHANNELS = 8
+
+
+async def fetch_channels(mc: Any) -> list[dict[str, Any]]:
+    """Read the channels actually configured on the device.
+
+    Probes each channel slot (up to the device's reported ``max_channels``,
+    or ``DEFAULT_MAX_CHANNELS`` if it doesn't say) and returns the
+    CHANNEL_INFO payloads for the populated ones. Slots with a blank name
+    are unconfigured and skipped.
+    """
+    max_channels = (mc.self_info or {}).get("max_channels") or DEFAULT_MAX_CHANNELS
+    channels: list[dict[str, Any]] = []
+    for idx in range(max_channels):
+        result = await mc.commands.get_channel(idx)
+        if result.type == EventType.ERROR:
+            logger.debug("get_channel(%d) failed: %r", idx, result.payload)
+            continue
+        payload = result.payload
+        if not payload.get("channel_name"):
+            continue
+        channels.append(payload)
+    return channels
+
 
 async def _apply(description: str, result: Any) -> None:
     """Log the outcome of one device-setting command."""
@@ -94,7 +119,24 @@ class MeshCoreRunner:
         # Without this, incoming messages stay queued on the device and
         # the *_MSG_RECV events never fire.
         await self.mc.start_auto_message_fetching()
+        await self._log_channels()
         logger.info("bot started as %r, listening for messages", self.bot.name)
+
+    async def _log_channels(self) -> None:
+        """Log the channels the device is configured for, read from the radio."""
+        try:
+            channels = await fetch_channels(self.mc)
+        except Exception:
+            logger.exception("could not read channels from the device")
+            return
+        if not channels:
+            logger.info("no channels configured on the device")
+            return
+        summary = ", ".join(
+            f"{c['channel_idx']}:{c['channel_name']} (#{c['channel_hash']})"
+            for c in channels
+        )
+        logger.info("device channels: %s", summary)
 
     async def stop(self) -> None:
         for subscription in self._subscriptions:
@@ -128,6 +170,14 @@ class MeshCoreRunner:
             raw=payload,
         )
 
+        logger.info(
+            "DM from %s (%s) [%s]: %r",
+            contact.get("adv_name"),
+            prefix,
+            message.path_description,
+            message.text,
+        )
+
         async def reply(text: str) -> None:
             result = await self.mc.commands.send_msg(contact, text)
             if result.type == EventType.ERROR:
@@ -156,6 +206,14 @@ class MeshCoreRunner:
             path=payload.get("path"),
             path_hash_mode=payload.get("path_hash_mode"),
             raw=payload,
+        )
+
+        logger.info(
+            "channel %d msg from %s [%s]: %r",
+            channel_idx,
+            sender_name,
+            message.path_description,
+            text,
         )
 
         async def reply(text: str) -> None:

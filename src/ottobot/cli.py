@@ -68,6 +68,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 async def run(args: argparse.Namespace) -> None:
     config = load_config(args.config) if args.config else BotConfig()
+    if config.log_level:
+        logging.getLogger().setLevel(config.log_level)
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
@@ -94,7 +96,11 @@ async def run(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=logging.INFO)
+    # Default level; the config may raise it or lower it once loaded (see run()).
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    )
     asyncio.run(run(args))
 
 

@@ -9,6 +9,11 @@
 # Advertised name of the bot/device. Also used for channel addressing.
 name = "ottobot"
 
+# How verbose the logs are. One of DEBUG, INFO, WARNING, ERROR, CRITICAL.
+# Omit to keep the default (INFO). Use DEBUG to see ignored/non-command
+# messages and per-command dispatch details.
+# log_level = "INFO"
+
 # The bot's key pair, as 128 hex chars (64 bytes). Pinning this here keeps
 # the bot's identity stable across re-flashes or device swaps. Export the
 # current one from a device if you want to reuse it.

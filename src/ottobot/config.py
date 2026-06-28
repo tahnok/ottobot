@@ -20,10 +20,13 @@ it stays easy to unit-test. Example file:
     bw = 250.0
     sf = 11
     cr = 5
+
+    log_level = "INFO"                  # optional; DEBUG/INFO/WARNING/...
 """
 
 from __future__ import annotations
 
+import logging
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +57,8 @@ class BotConfig:
     private_key: bytes | None = None
     channels: tuple[ChannelConfig, ...] = ()
     radio: RadioConfig | None = None
+    # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
+    log_level: str | None = None
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -93,6 +98,14 @@ def _parse_radio(raw: dict) -> RadioConfig:
     )
 
 
+def _parse_log_level(value: object) -> str:
+    name = str(value).upper()
+    if name not in logging.getLevelNamesMapping():
+        valid = ", ".join(sorted(logging.getLevelNamesMapping()))
+        raise ValueError(f"log_level {value!r} is not a known level (one of: {valid})")
+    return name
+
+
 def parse_config(data: dict) -> BotConfig:
     """Build a BotConfig from already-parsed TOML data."""
     private_key_hex = data.get("private_key")
@@ -104,11 +117,14 @@ def parse_config(data: dict) -> BotConfig:
     channels = tuple(_parse_channel(c) for c in data.get("channels", ()))
     radio = _parse_radio(data["radio"]) if "radio" in data else None
     name = data.get("name")
+    log_level_raw = data.get("log_level")
+    log_level = _parse_log_level(log_level_raw) if log_level_raw is not None else None
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
         channels=channels,
         radio=radio,
+        log_level=log_level,
     )
 
 

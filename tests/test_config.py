@@ -96,6 +96,19 @@ def test_radio_missing_keys() -> None:
             """)
 
 
+def test_log_level_defaults_to_none() -> None:
+    assert parse('name = "bot"').log_level is None
+
+
+def test_log_level_is_parsed_and_uppercased() -> None:
+    assert parse('log_level = "debug"').log_level == "DEBUG"
+
+
+def test_bad_log_level_raises() -> None:
+    with pytest.raises(ValueError, match="log_level 'loud' is not a known level"):
+        parse('log_level = "loud"')
+
+
 def test_load_config_reads_file(tmp_path) -> None:
     path = tmp_path / "ottobot.toml"
     path.write_text('name = "fromfile"\n')
