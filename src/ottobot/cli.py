@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from pathlib import Path
 
 from .bot import MeshBot
 from .commands import load_commands
@@ -28,10 +29,13 @@ from .runner import MeshCoreRunner, apply_settings, connect
 from .sinks import load_sinks
 from .simulator import Simulator
 
+# Where stateful sinks keep their sqlite file when the config doesn't say.
+DEFAULT_DB_PATH = Path("ottobot.db")
 
-def build_bot(name: str, prefix: str = "!") -> MeshBot:
+
+def build_bot(name: str, prefix: str = "!", db_path: Path = DEFAULT_DB_PATH) -> MeshBot:
     """A MeshBot named *name* with every command in ottobot.commands loaded."""
-    bot = MeshBot(name=name, prefix=prefix)
+    bot = MeshBot(name=name, prefix=prefix, db_path=db_path)
     load_commands(bot)
     load_sinks(bot)
     return bot
@@ -72,10 +76,13 @@ async def run(args: argparse.Namespace) -> None:
     config = load_config(args.config) if args.config else BotConfig()
     if config.log_level:
         logging.getLogger().setLevel(config.log_level)
+    db_path = config.database or DEFAULT_DB_PATH
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
-        await Simulator(build_bot(name=name)).repl()
+        bot = build_bot(name=name, db_path=db_path)
+        await bot.setup()
+        await Simulator(bot).repl()
         return
     mc = await connect(
         serial=args.serial, baudrate=args.baudrate, ble=args.ble, tcp=args.tcp
@@ -90,7 +97,9 @@ async def run(args: argparse.Namespace) -> None:
                 "could not determine the bot's name: the device reports none. "
                 "Pass --name or set name in the config to set one."
             )
-        runner = MeshCoreRunner(build_bot(name=name), mc)
+        bot = build_bot(name=name, db_path=db_path)
+        await bot.setup()
+        runner = MeshCoreRunner(bot, mc)
         await runner.run_forever()
     finally:
         await mc.disconnect()

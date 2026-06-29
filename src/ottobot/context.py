@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .bot import MeshBot
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,9 @@ class Context:
     command_name: str | None
     args: str
     _reply: ReplyFunc
+    # The bot handling this message. Optional so tests can build a Context
+    # without one; dispatch always sets it, so handlers can rely on it.
+    bot: "MeshBot | None" = None
 
     @property
     def is_dm(self) -> bool:

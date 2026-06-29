@@ -1,7 +1,7 @@
 """An Ottawa mesh bot for MeshCore networks, with pluggable commands."""
 
 from .bot import MeshBot
-from .registry import Command, CommandRegistry, command, Sink, sink
+from .registry import Command, CommandRegistry, command, OnStart, on_start, Sink, sink
 from .context import Context, IncomingMessage
 
 __all__ = [
@@ -11,6 +11,8 @@ __all__ = [
     "Context",
     "IncomingMessage",
     "command",
+    "OnStart",
+    "on_start",
     "Sink",
     "sink",
 ]

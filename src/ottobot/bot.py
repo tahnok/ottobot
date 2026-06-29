@@ -9,8 +9,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from pathlib import Path
 
-from .registry import Command, CommandHandler, CommandRegistry, Sink, SinkRegistry
+from .registry import (
+    Command,
+    CommandHandler,
+    CommandRegistry,
+    OnStart,
+    Sink,
+    SinkRegistry,
+)
 from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
@@ -37,6 +45,7 @@ class MeshBot:
         name: str,
         prefix: str = "!",
         respond_in_channels: bool = True,  # TODO: remove this
+        db_path: Path | None = None,
     ) -> None:
         self.prefix = prefix
         # The bot's own name on the mesh. In channels, commands that
@@ -44,8 +53,12 @@ class MeshBot:
         # (e.g. "@[ottobot] !ping").
         self.name = name
         self.respond_in_channels = respond_in_channels
+        # Where sinks that persist state keep their sqlite file. Wired from
+        # config by cli.build_bot; sinks read it via ctx.bot.db_path.
+        self.db_path = db_path
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
+        self._on_start: list[OnStart] = []
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -79,6 +92,14 @@ class MeshBot:
 
     def add_sink(self, sink: Sink) -> None:
         self.sink_registry.register(sink)
+
+    def add_on_start(self, hook: OnStart) -> None:
+        self._on_start.append(hook)
+
+    async def setup(self) -> None:
+        """Run every registered @on_start hook once, before handling messages."""
+        for hook in self._on_start:
+            await hook.handler(self)
 
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
@@ -121,7 +142,11 @@ class MeshBot:
         """Handle one incoming message."""
 
         sink_ctx = Context(
-            message=message, command_name=None, args=message.text, _reply=reply
+            message=message,
+            command_name=None,
+            args=message.text,
+            _reply=reply,
+            bot=self,
         )
         for sink in self.sink_registry.all():
             try:
@@ -155,7 +180,11 @@ class MeshBot:
             )
             return
         ctx = Context(
-            message=message, command_name=command.name, args=args, _reply=reply
+            message=message,
+            command_name=command.name,
+            args=args,
+            _reply=reply,
+            bot=self,
         )
         try:
             result = await command.handler(ctx)

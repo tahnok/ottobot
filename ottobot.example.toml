@@ -14,6 +14,11 @@ name = "ottobot"
 # messages and per-command dispatch details.
 # log_level = "INFO"
 
+# Where stateful sinks (e.g. the welcome sink) keep their sqlite file. Omit
+# to use the default "ottobot.db" in the working directory. In Docker, point
+# it at the bind-mounted /data dir so it survives container restarts.
+database = "/data/ottobot.db"
+
 # The bot's key pair, as 128 hex chars (64 bytes). Pinning this here keeps
 # the bot's identity stable across re-flashes or device swaps. Export the
 # current one from a device if you want to reuse it.
