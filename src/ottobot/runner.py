@@ -231,6 +231,9 @@ class MeshCoreRunner:
         )
 
         async def reply(text: str) -> None:
+            logger.info(
+                "DM reply to %s (%s): %r", contact.get("adv_name"), prefix, text
+            )
             result = await self.mc.commands.send_msg(contact, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send DM reply: %r", result.payload)
@@ -269,6 +272,7 @@ class MeshCoreRunner:
         )
 
         async def reply(text: str) -> None:
+            logger.info("channel %d reply: %r", channel_idx, text)
             result = await self.mc.commands.send_chan_msg(channel_idx, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)
