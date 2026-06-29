@@ -9,4 +9,4 @@ from ottobot import Context, sink
 
 @sink()
 async def welcome(ctx: Context) -> str | None:
-    return "welcome to the mesh"
+    return
