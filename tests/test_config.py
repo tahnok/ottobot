@@ -109,6 +109,18 @@ def test_bad_log_level_raises() -> None:
         parse('log_level = "loud"')
 
 
+def test_discord_webhook_url_is_parsed() -> None:
+    config = parse("""
+        [discord]
+        webhook_url = "https://discord.com/api/webhooks/1/abc"
+        """)
+    assert config.discord_webhook_url == "https://discord.com/api/webhooks/1/abc"
+
+
+def test_discord_webhook_url_defaults_to_none() -> None:
+    assert parse('name = "bot"').discord_webhook_url is None
+
+
 def test_load_config_reads_file(tmp_path) -> None:
     path = tmp_path / "ottobot.toml"
     path.write_text('name = "fromfile"\n')

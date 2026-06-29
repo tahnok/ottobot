@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+from .config import BotConfig
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,9 @@ class Context:
     command_name: str | None
     args: str
     _reply: ReplyFunc
+    # The loaded bot config, so sinks/commands can read settings (e.g. the
+    # discord sink's webhook URL). Defaults to an empty config.
+    config: BotConfig = field(default_factory=BotConfig)
 
     @property
     def is_dm(self) -> bool:

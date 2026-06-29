@@ -22,6 +22,9 @@ it stays easy to unit-test. Example file:
     cr = 5
 
     log_level = "INFO"                  # optional; DEBUG/INFO/WARNING/...
+
+    [discord]
+    webhook_url = "https://discord.com/api/webhooks/..."  # optional sink
 """
 
 from __future__ import annotations
@@ -59,6 +62,9 @@ class BotConfig:
     radio: RadioConfig | None = None
     # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
     log_level: str | None = None
+    # Discord incoming-webhook URL; when set, the discord sink mirrors
+    # public-channel messages to it. None disables the sink.
+    discord_webhook_url: str | None = None
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -119,12 +125,16 @@ def parse_config(data: dict) -> BotConfig:
     name = data.get("name")
     log_level_raw = data.get("log_level")
     log_level = _parse_log_level(log_level_raw) if log_level_raw is not None else None
+    discord = data.get("discord", {})
+    webhook_url = discord.get("webhook_url")
+    discord_webhook_url = str(webhook_url) if webhook_url is not None else None
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
         channels=channels,
         radio=radio,
         log_level=log_level,
+        discord_webhook_url=discord_webhook_url,
     )
 
 

@@ -34,3 +34,8 @@ freq = 910.525
 bw = 62.5
 sf = 7
 cr = 5
+
+# Discord webhook sink. When webhook_url is set, every message seen on the
+# public channel is mirrored to that Discord webhook. Omit to disable.
+# [discord]
+# webhook_url = "https://discord.com/api/webhooks/123456789/abcdefg"
