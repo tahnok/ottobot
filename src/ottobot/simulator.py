@@ -93,7 +93,7 @@ class Simulator:
 
         await self.bot.dispatch(self.build_message(line), reply)
         if len(replies) == 0:
-            return ["(no reply — the bot ignores this, it is not a known command)"]
+            return ["(no response)"]
         out: list[str] = []
         for text in replies:
             first, *rest = text.split("\n")

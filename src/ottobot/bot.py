@@ -124,7 +124,13 @@ class MeshBot:
             message=message, command_name=None, args=message.text, _reply=reply
         )
         for sink in self.sink_registry.all():
-            result = await sink.handler(sink_ctx)
+            try:
+                result = await sink.handler(sink_ctx)
+            except Exception:
+                logger.exception(
+                    "sink %r raised", getattr(sink.handler, "__name__", sink.handler)
+                )
+                continue
             if result is not None:
                 await reply(result)
 

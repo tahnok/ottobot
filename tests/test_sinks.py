@@ -113,6 +113,25 @@ class TestSinkDispatch:
         await bot.dispatch(dm("hi"), reply)
         assert reply.replies == []
 
+    async def test_raising_sink_does_not_stop_other_sinks_or_commands(
+        self, bot: MeshBot, reply: ReplyRecorder
+    ) -> None:
+        # A broken sink must not suppress later sinks or command handling.
+        async def boom(ctx: Context) -> str:
+            raise RuntimeError("kaboom")
+
+        async def watcher(ctx: Context) -> str:
+            return "still here"
+
+        @bot.command("ping")
+        async def ping(ctx: Context) -> str:
+            return "pong"
+
+        bot.add_sink(Sink(handler=boom))
+        bot.add_sink(Sink(handler=watcher))
+        await bot.dispatch(dm("!ping"), reply)
+        assert reply.replies == ["still here", "pong"]
+
     async def test_all_registered_sinks_run(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:

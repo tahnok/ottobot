@@ -32,11 +32,11 @@ class TestMessages:
 
     async def test_unknown_command_explains_silence(self, sim: Simulator) -> None:
         (notice,) = await sim.handle_line("!nosuchthing")
-        assert "no reply" in notice
+        assert "no response" in notice
 
     async def test_non_command_text_explains_silence(self, sim: Simulator) -> None:
         (notice,) = await sim.handle_line("just chatting")
-        assert "no reply" in notice
+        assert "no response" in notice
 
     async def test_blank_line_prints_nothing(self, sim: Simulator) -> None:
         assert await sim.handle_line("   ") == []
