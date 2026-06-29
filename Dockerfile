@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # --- Build stage -----------------------------------------------------------
-# Pin to a uv image that ships the project's Python (3.13). uv builds the
+# Pin to a uv image that ships the project's Python (3.14). uv builds the
 # project into a self-contained virtualenv at /app/.venv.
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # --- Runtime stage ---------------------------------------------------------
 # A bare Python image — no uv, no build tools — with just the venv copied in.
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # Run as an unprivileged user.
 RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
