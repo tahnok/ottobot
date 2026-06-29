@@ -78,8 +78,7 @@ class TestDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        handled = await bot.dispatch(dm("!ping"), reply)
-        assert handled
+        await bot.dispatch(dm("!ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_handler_can_reply_directly(
@@ -106,15 +105,13 @@ class TestDispatch:
     async def test_non_command_text_is_ignored(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:
-        handled = await bot.dispatch(dm("just chatting"), reply)
-        assert not handled
+        await bot.dispatch(dm("just chatting"), reply)
         assert reply.replies == []
 
     async def test_unknown_command_is_ignored(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:
-        handled = await bot.dispatch(dm("!nosuchthing"), reply)
-        assert not handled
+        await bot.dispatch(dm("!nosuchthing"), reply)
         assert reply.replies == []
 
     async def test_handler_returning_none_sends_nothing(
@@ -124,8 +121,7 @@ class TestDispatch:
         async def quiet(ctx: Context) -> None:
             return None
 
-        handled = await bot.dispatch(dm("!quiet"), reply)
-        assert handled
+        await bot.dispatch(dm("!quiet"), reply)
         assert reply.replies == []
 
     async def test_handler_exception_is_caught_and_reported(
@@ -135,8 +131,7 @@ class TestDispatch:
         async def boom(ctx: Context) -> str:
             raise RuntimeError("kaboom")
 
-        handled = await bot.dispatch(dm("!boom"), reply)
-        assert handled
+        await bot.dispatch(dm("!boom"), reply)
         assert reply.replies == ["Sorry, !boom hit an error."]
 
     async def test_channel_messages_handled_when_addressed(
@@ -146,8 +141,7 @@ class TestDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        handled = await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
-        assert handled
+        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_messages_ignored_when_disabled(
@@ -159,8 +153,7 @@ class TestDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        handled = await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
-        assert not handled
+        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
         assert reply.replies == []
 
 
@@ -205,40 +198,34 @@ class TestAddressing:
 
     async def test_dm_needs_no_name(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(dm("!ping"), reply)
-        assert handled
+        await bot.dispatch(dm("!ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_dm_tolerates_name(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(dm("ottobot !ping"), reply)
-        assert handled
+        await bot.dispatch(dm("ottobot !ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_requires_name(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(channel_msg("!ping"), reply)
-        assert not handled
+        await bot.dispatch(channel_msg("!ping"), reply)
         assert reply.replies == []
 
     async def test_channel_runs_when_addressed(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(channel_msg("ottobot !ping"), reply)
-        assert handled
+        await bot.dispatch(channel_msg("ottobot !ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_runs_with_app_mention(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
-        assert handled
+        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_opt_out_runs_without_name(
         self, reply: ReplyRecorder
     ) -> None:
         bot = _named_bot()
-        handled = await bot.dispatch(channel_msg("!status"), reply)
-        assert handled
+        await bot.dispatch(channel_msg("!status"), reply)
         assert reply.replies == ["ok"]
 
     async def test_context_exposes_sender_and_dm_flag(

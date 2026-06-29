@@ -13,10 +13,10 @@ def bot() -> MeshBot:
 
 
 async def test_echo_repeats_args(bot: MeshBot, reply: ReplyRecorder) -> None:
-    assert await bot.dispatch(dm("!echo hello world"), reply)
+    await bot.dispatch(dm("!echo hello world"), reply)
     assert reply.replies == ["hello world"]
 
 
 async def test_echo_without_args(bot: MeshBot, reply: ReplyRecorder) -> None:
-    assert await bot.dispatch(dm("!echo"), reply)
+    await bot.dispatch(dm("!echo"), reply)
     assert reply.replies == ["(nothing to echo)"]

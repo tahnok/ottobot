@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from .registry import Command, CommandHandler, CommandRegistry
+from .registry import Command, CommandHandler, CommandRegistry, Sink, SinkRegistry
 from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class MeshBot:
         self,
         name: str,
         prefix: str = "!",
-        respond_in_channels: bool = True,
+        respond_in_channels: bool = True,  # TODO: remove this
     ) -> None:
         self.prefix = prefix
         # The bot's own name on the mesh. In channels, commands that
@@ -45,6 +45,7 @@ class MeshBot:
         self.name = name
         self.respond_in_channels = respond_in_channels
         self.registry = CommandRegistry()
+        self.sink_registry = SinkRegistry()
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -75,6 +76,9 @@ class MeshBot:
 
     def add_command(self, command: Command) -> None:
         self.registry.register(command)
+
+    def add_sink(self, sink: Sink) -> None:
+        self.sink_registry.register(sink)
 
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
@@ -113,19 +117,34 @@ class MeshBot:
                 return rest.lstrip(" :,"), True
         return text, False
 
-    async def dispatch(self, message: IncomingMessage, reply: ReplyFunc) -> bool:
-        """Handle one incoming message. Returns True if a command ran."""
+    async def dispatch(self, message: IncomingMessage, reply: ReplyFunc) -> None:
+        """Handle one incoming message."""
+
+        sink_ctx = Context(
+            message=message, command_name=None, args=message.text, _reply=reply
+        )
+        for sink in self.sink_registry.all():
+            try:
+                result = await sink.handler(sink_ctx)
+            except Exception:
+                logger.exception(
+                    "sink %r raised", getattr(sink.handler, "__name__", sink.handler)
+                )
+                continue
+            if result is not None:
+                await reply(result)
+
         if not message.is_dm and not self.respond_in_channels:
-            return False
+            return
         text, addressed = self.strip_address(message.text)
         parsed = self.parse(text)
         if parsed is None:
-            return False
+            return
         name, args = parsed
         command = self.registry.get(name)
         if command is None:
             logger.debug("ignoring unknown command %r", name)
-            return False
+            return
         # On a shared channel, only answer when addressed by name (unless
         # the command opts out). DMs are always addressed to the bot.
         if not message.is_dm and command.requires_address and not addressed:
@@ -134,7 +153,7 @@ class MeshBot:
                 command.name,
                 self.name,
             )
-            return False
+            return
         ctx = Context(
             message=message, command_name=command.name, args=args, _reply=reply
         )
@@ -143,10 +162,9 @@ class MeshBot:
         except Exception:
             logger.exception("command %r raised", command.name)
             await reply(f"Sorry, {self.prefix}{command.name} hit an error.")
-            return True
+            return
         if result is not None:
             await reply(result)
-        return True
 
     async def _help(self, ctx: Context) -> str:
         lines = []

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
 
 _COMMAND_ATTR = "_meshbot_command"
+_SINK_ATTR = "_meshbot_sink"
 
 
 @dataclass
@@ -31,6 +32,13 @@ class Command:
     help: str = ""
     aliases: tuple[str, ...] = ()
     requires_address: bool = True
+
+
+@dataclass
+class Sink:
+    """A function that's called on every message the bot receives."""
+
+    handler: CommandHandler
 
 
 def command(
@@ -67,6 +75,26 @@ def command(
     return decorator
 
 
+def sink() -> Callable[[CommandHandler], CommandHandler]:
+    """Mark a module-level coroutine as a message sink.
+
+    This only attaches metadata to the function — no bot instance is
+    needed at import time. The sink modules under
+    ottobot.sinks use this; load_sinks() later collects the
+    marked handlers via module_sinks() and registers them on the bot.
+    """
+
+    def decorator(handler: CommandHandler) -> CommandHandler:
+        setattr(
+            handler,
+            _SINK_ATTR,
+            Sink(handler=handler),
+        )
+        return handler
+
+    return decorator
+
+
 def module_commands(module: ModuleType) -> list[Command]:
     """The @command-marked handlers defined in *module*, in definition order.
 
@@ -78,6 +106,21 @@ def module_commands(module: ModuleType) -> list[Command]:
         cmd
         for obj in vars(module).values()
         if (cmd := getattr(obj, _COMMAND_ATTR, None)) is not None
+        and getattr(obj, "__module__", None) == module.__name__
+    ]
+
+
+def module_sinks(module: ModuleType) -> list[Sink]:
+    """The @sink-marked handlers defined in *module*, in definition order.
+
+    Handlers merely imported into the module (e.g. from a shared helper)
+    are excluded, so importing another sink's handler can't register
+    it twice.
+    """
+    return [
+        cmd
+        for obj in vars(module).values()
+        if (cmd := getattr(obj, _SINK_ATTR, None)) is not None
         and getattr(obj, "__module__", None) == module.__name__
     ]
 
@@ -104,3 +147,17 @@ class CommandRegistry:
     def all(self) -> list[Command]:
         """All registered commands, sorted by name (aliases excluded)."""
         return sorted(self._commands.values(), key=lambda c: c.name)
+
+
+@dataclass
+class SinkRegistry:
+    """Holds sinks."""
+
+    _sinks: list[Sink] = field(default_factory=list)
+
+    def register(self, sink: Sink) -> None:
+        self._sinks.append(sink)
+
+    def all(self) -> list[Sink]:
+        """All registered sinks."""
+        return self._sinks

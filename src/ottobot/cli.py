@@ -25,6 +25,7 @@ from .bot import MeshBot
 from .commands import load_commands
 from .config import BotConfig, load_config
 from .runner import MeshCoreRunner, apply_settings, connect
+from .sinks import load_sinks
 from .simulator import Simulator
 
 
@@ -32,6 +33,7 @@ def build_bot(name: str, prefix: str = "!") -> MeshBot:
     """A MeshBot named *name* with every command in ottobot.commands loaded."""
     bot = MeshBot(name=name, prefix=prefix)
     load_commands(bot)
+    load_sinks(bot)
     return bot
 
 

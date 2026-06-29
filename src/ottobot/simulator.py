@@ -91,9 +91,9 @@ class Simulator:
         async def reply(text: str) -> None:
             replies.append(text)
 
-        handled = await self.bot.dispatch(self.build_message(line), reply)
-        if not handled:
-            return ["(no reply — the bot ignores this, it is not a known command)"]
+        await self.bot.dispatch(self.build_message(line), reply)
+        if len(replies) == 0:
+            return ["(no response)"]
         out: list[str] = []
         for text in replies:
             first, *rest = text.split("\n")

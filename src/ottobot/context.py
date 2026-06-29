@@ -81,7 +81,7 @@ class Context:
     """What a command handler gets to work with."""
 
     message: IncomingMessage
-    command_name: str
+    command_name: str | None
     args: str
     _reply: ReplyFunc
 
