@@ -4,7 +4,25 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
+
+
+class DeviceError(Exception):
+    """A device action (e.g. sending an advert) was rejected by the radio."""
+
+
+class Device(Protocol):
+    """Connection-scoped actions a command can ask the radio to perform.
+
+    This is the transport-agnostic escape hatch for commands that need to
+    drive the device itself rather than just reply. The runner backs it
+    with the real meshcore device; the simulator and tests supply stand-ins.
+    Methods raise DeviceError if the device rejects the request.
+    """
+
+    async def send_advert(self, flood: bool = False) -> None:
+        """Broadcast an advert. flood propagates it across the whole mesh."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -84,6 +102,10 @@ class Context:
     command_name: str | None
     args: str
     _reply: ReplyFunc
+    # The connected radio, for commands that act on the device rather than
+    # just reply (e.g. !advert). None when there is no device behind the
+    # bot — e.g. in the simulator or tests that don't set one.
+    device: Device | None = None
 
     @property
     def is_dm(self) -> bool:

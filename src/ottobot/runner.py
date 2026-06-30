@@ -18,7 +18,7 @@ from meshcore.events import Event, Subscription
 
 from .bot import MeshBot
 from .config import BotConfig
-from .context import IncomingMessage
+from .context import DeviceError, IncomingMessage
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class _Commands(Protocol):
     async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> Event: ...
     async def send_msg(self, contact: dict[str, Any], text: str) -> Event: ...
     async def send_chan_msg(self, channel_idx: int, text: str) -> Event: ...
+    async def send_advert(self, flood: bool = False) -> Event: ...
 
 
 class MeshCoreLike(Protocol):
@@ -153,12 +154,30 @@ async def connect(
     return await MeshCore.create_tcp(host, int(port or 5000))
 
 
+class _MeshCoreDevice:
+    """Adapts a meshcore device to the transport-agnostic ``Device`` protocol.
+
+    This is what commands reach through ``ctx.device``; it keeps the
+    meshcore specifics (Event/ERROR handling) out of the command code.
+    """
+
+    def __init__(self, meshcore: MeshCoreLike) -> None:
+        self.mc = meshcore
+
+    async def send_advert(self, flood: bool = False) -> None:
+        result = await self.mc.commands.send_advert(flood)
+        if result.type == EventType.ERROR:
+            raise DeviceError(f"device rejected advert: {result.payload!r}")
+
+
 class MeshCoreRunner:
     """Runs a MeshBot against a connected meshcore.MeshCore instance."""
 
     def __init__(self, bot: MeshBot, meshcore: MeshCoreLike) -> None:
         self.bot = bot
         self.mc = meshcore
+        # Let commands (e.g. !advert) act on the radio via ctx.device.
+        self.bot.device = _MeshCoreDevice(meshcore)
         self._subscriptions: list[Subscription] = []
 
     async def start(self) -> None:

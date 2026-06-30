@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 
 from .registry import Command, CommandHandler, CommandRegistry, Sink, SinkRegistry
-from .context import Context, IncomingMessage, ReplyFunc
+from .context import Context, Device, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,10 @@ class MeshBot:
         # (e.g. "@[ottobot] !ping").
         self.name = name
         self.respond_in_channels = respond_in_channels
+        # The connected radio, set by whatever drives the bot (the runner
+        # for a real device). Commands reach it via ctx.device; None when
+        # there is no device, as in the simulator or most tests.
+        self.device: Device | None = None
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
         self.add_command(
@@ -121,7 +125,11 @@ class MeshBot:
         """Handle one incoming message."""
 
         sink_ctx = Context(
-            message=message, command_name=None, args=message.text, _reply=reply
+            message=message,
+            command_name=None,
+            args=message.text,
+            _reply=reply,
+            device=self.device,
         )
         for sink in self.sink_registry.all():
             try:
@@ -155,7 +163,11 @@ class MeshBot:
             )
             return
         ctx = Context(
-            message=message, command_name=command.name, args=args, _reply=reply
+            message=message,
+            command_name=command.name,
+            args=args,
+            _reply=reply,
+            device=self.device,
         )
         try:
             result = await command.handler(ctx)
