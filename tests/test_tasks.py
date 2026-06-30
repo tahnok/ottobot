@@ -146,10 +146,10 @@ class TestTaskLoading:
         with pytest.raises(TypeError, match="must define at least one @task"):
             load_tasks(MeshBot(name="ottobot"))
 
-    def test_load_tasks_loads_rss(self) -> None:
+    def test_load_tasks_loads_rss_and_weather_alerts(self) -> None:
         loaded = load_tasks(MeshBot(name="ottobot"))
         assert loaded == iter_module_names()
-        assert "rss" in loaded
+        assert {"rss", "weather_alerts"} <= set(loaded)
 
     def test_every_task_module_defines_a_task(self) -> None:
         for name in iter_module_names():
@@ -161,4 +161,4 @@ class TestTaskLoading:
     def test_build_bot_exposes_all_tasks(self) -> None:
         bot = build_bot(name="ottobot")
         names = {t.name for t in bot.task_registry.all()}
-        assert "rss" in names
+        assert {"rss", "weather_alerts"} <= names
