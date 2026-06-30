@@ -45,6 +45,13 @@ CONTROL_HELP = [
 FAKE_SENDER_KEY = "f00dface0042"
 
 
+class _SimulatedDevice:
+    """A no-op Device: device actions "succeed" without any hardware."""
+
+    async def send_advert(self, flood: bool = False) -> None:
+        return None
+
+
 class Simulator:
     """Feeds typed lines into a MeshBot as if they arrived from the mesh.
 
@@ -56,6 +63,9 @@ class Simulator:
 
     def __init__(self, bot: MeshBot) -> None:
         self.bot = bot
+        # Back ctx.device with a no-op so device-driven commands (e.g.
+        # !advert) run in the simulator without touching any hardware.
+        self.bot.device = _SimulatedDevice()
         self.sender_name = "you"
         self.channel_idx: int | None = 0  # start on channel 0, like the mesh default
         self.path_len: int = 255  # arrived direct, like a nearby node
