@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from .config import BotConfig
 from .registry import Command, CommandHandler, CommandRegistry, Sink, SinkRegistry
 from .context import Context, IncomingMessage, ReplyFunc
 
@@ -37,6 +38,7 @@ class MeshBot:
         name: str,
         prefix: str = "!",
         respond_in_channels: bool = True,  # TODO: remove this
+        config: BotConfig | None = None,
     ) -> None:
         self.prefix = prefix
         # The bot's own name on the mesh. In channels, commands that
@@ -44,6 +46,8 @@ class MeshBot:
         # (e.g. "@[ottobot] !ping").
         self.name = name
         self.respond_in_channels = respond_in_channels
+        # The loaded TOML config, surfaced to handlers via Context.config.
+        self.config = config or BotConfig()
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
         self.add_command(
@@ -121,7 +125,11 @@ class MeshBot:
         """Handle one incoming message."""
 
         sink_ctx = Context(
-            message=message, command_name=None, args=message.text, _reply=reply
+            message=message,
+            command_name=None,
+            args=message.text,
+            _reply=reply,
+            config=self.config,
         )
         for sink in self.sink_registry.all():
             try:
@@ -155,7 +163,11 @@ class MeshBot:
             )
             return
         ctx = Context(
-            message=message, command_name=command.name, args=args, _reply=reply
+            message=message,
+            command_name=command.name,
+            args=args,
+            _reply=reply,
+            config=self.config,
         )
         try:
             result = await command.handler(ctx)

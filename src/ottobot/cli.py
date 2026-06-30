@@ -29,9 +29,9 @@ from .sinks import load_sinks
 from .simulator import Simulator
 
 
-def build_bot(name: str, prefix: str = "!") -> MeshBot:
+def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> MeshBot:
     """A MeshBot named *name* with every command in ottobot.commands loaded."""
-    bot = MeshBot(name=name, prefix=prefix)
+    bot = MeshBot(name=name, prefix=prefix, config=config)
     load_commands(bot)
     load_sinks(bot)
     return bot
@@ -75,7 +75,7 @@ async def run(args: argparse.Namespace) -> None:
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
-        await Simulator(build_bot(name=name)).repl()
+        await Simulator(build_bot(name=name, config=config)).repl()
         return
     mc = await connect(
         serial=args.serial, baudrate=args.baudrate, ble=args.ble, tcp=args.tcp
@@ -90,7 +90,7 @@ async def run(args: argparse.Namespace) -> None:
                 "could not determine the bot's name: the device reports none. "
                 "Pass --name or set name in the config to set one."
             )
-        runner = MeshCoreRunner(build_bot(name=name), mc)
+        runner = MeshCoreRunner(build_bot(name=name, config=config), mc)
         await runner.run_forever()
     finally:
         await mc.disconnect()
