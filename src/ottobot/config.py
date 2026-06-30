@@ -25,6 +25,9 @@ it stays easy to unit-test. Example file:
 
     [discord]
     webhook_url = "https://discord.com/api/webhooks/..."  # optional sink
+
+    [rss]
+    url = "https://example.com/feed.xml"                  # optional task
 """
 
 from __future__ import annotations
@@ -65,6 +68,16 @@ class BotConfig:
     # Discord incoming-webhook URL; when set, the discord sink mirrors
     # public-channel messages to it. None disables the sink.
     discord_webhook_url: str | None = None
+    # RSS feed URL; when set, the rss task announces new feed items on the
+    # public channel. None disables the task.
+    rss_feed_url: str | None = None
+
+    def public_channel_idx(self) -> int:
+        """Index of the channel named "public" in this config, or 0 by default."""
+        for channel in self.channels:
+            if channel.name.lower() == "public":
+                return channel.index
+        return 0
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -128,6 +141,9 @@ def parse_config(data: dict) -> BotConfig:
     discord = data.get("discord", {})
     webhook_url = discord.get("webhook_url")
     discord_webhook_url = str(webhook_url) if webhook_url is not None else None
+    rss = data.get("rss", {})
+    rss_url = rss.get("url")
+    rss_feed_url = str(rss_url) if rss_url is not None else None
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
@@ -135,6 +151,7 @@ def parse_config(data: dict) -> BotConfig:
         radio=radio,
         log_level=log_level,
         discord_webhook_url=discord_webhook_url,
+        rss_feed_url=rss_feed_url,
     )
 
 

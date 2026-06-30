@@ -121,6 +121,40 @@ def test_discord_webhook_url_defaults_to_none() -> None:
     assert parse('name = "bot"').discord_webhook_url is None
 
 
+def test_rss_feed_url_is_parsed() -> None:
+    config = parse("""
+        [rss]
+        url = "https://example.com/feed.xml"
+        """)
+    assert config.rss_feed_url == "https://example.com/feed.xml"
+
+
+def test_rss_feed_url_defaults_to_none() -> None:
+    assert parse('name = "bot"').rss_feed_url is None
+
+
+def test_public_channel_idx_defaults_to_zero() -> None:
+    assert BotConfig().public_channel_idx() == 0
+
+
+def test_public_channel_idx_finds_named_channel() -> None:
+    config = parse("""
+        [[channels]]
+        index = 2
+        name = "public"
+        """)
+    assert config.public_channel_idx() == 2
+
+
+def test_public_channel_idx_is_case_insensitive() -> None:
+    config = parse("""
+        [[channels]]
+        index = 3
+        name = "Public"
+        """)
+    assert config.public_channel_idx() == 3
+
+
 def test_load_config_reads_file(tmp_path) -> None:
     path = tmp_path / "ottobot.toml"
     path.write_text('name = "fromfile"\n')

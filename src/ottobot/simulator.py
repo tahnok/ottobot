@@ -12,6 +12,8 @@ of going to the bot:
     /name <name>        change the simulated sender's name
     /hops <n> [a1,b2]   pretend messages took n repeater hops, optionally
                         via the given comma-separated hop hashes
+    /task [name]        run a scheduled task once, right now (no name lists
+                        the available tasks)
     /status             show the simulated sender and route
     /help               list these controls
     /quit               leave the simulator
@@ -22,7 +24,7 @@ from __future__ import annotations
 import asyncio
 
 from .bot import MeshBot
-from .context import IncomingMessage
+from .context import IncomingMessage, TaskContext
 
 BANNER = (
     "Simulator: messages are handled in memory, nothing is sent over the mesh.\n"
@@ -36,6 +38,7 @@ CONTROL_HELP = [
     "/channel [n]        talk on channel n (default 0, where you start)",
     "/name <name>        change the simulated sender's name",
     "/hops <n> [a1,b2]   pretend messages took n repeater hops",
+    "/task [name]        run a scheduled task once, right now",
     "/status             show the simulated sender and route",
     "/quit               leave the simulator",
 ]
@@ -85,7 +88,7 @@ class Simulator:
         if not line:
             return []
         if line.startswith("/"):
-            return self._control(line[1:])
+            return await self._control(line[1:])
         replies: list[str] = []
 
         async def reply(text: str) -> None:
@@ -101,7 +104,7 @@ class Simulator:
             out.extend(f"     {extra}" for extra in rest)
         return out
 
-    def _control(self, body: str) -> list[str]:
+    async def _control(self, body: str) -> list[str]:
         name, _, args = body.partition(" ")
         args = args.strip()
         match name.lower():
@@ -121,6 +124,8 @@ class Simulator:
                 return [f"now sending as {self.sender_name}"]
             case "hops":
                 return self._set_hops(args)
+            case "task":
+                return await self._run_task(args)
             case "status":
                 return [self._status()]
             case "help" | "?":
@@ -130,6 +135,27 @@ class Simulator:
                 return ["bye"]
             case _:
                 return [f"unknown simulator control /{name} — try /help"]
+
+    async def _run_task(self, name: str) -> list[str]:
+        tasks = self.bot.task_registry.all()
+        if not name:
+            available = ", ".join(t.name for t in tasks) or "(none registered)"
+            return [f"usage: /task <name> — available: {available}"]
+        scheduled = next((t for t in tasks if t.name == name), None)
+        if scheduled is None:
+            return [f"no such task {name!r}"]
+        replies: list[str] = []
+
+        async def reply(text: str) -> None:
+            replies.append(text)
+
+        ctx = TaskContext(_reply=reply, config=self.bot.config)
+        result = await scheduled.handler(ctx)
+        if result is not None:
+            replies.append(result)
+        if not replies:
+            return [f"task {name!r} ran, no output"]
+        return [f"task> {text}" for text in replies]
 
     def _set_hops(self, args: str) -> list[str]:
         count_str, _, route = args.partition(" ")

@@ -23,18 +23,6 @@ from ottobot import Context, sink
 
 logger = logging.getLogger(__name__)
 
-# Matches runner.PUBLIC_CHANNEL_NAME; kept local so this module stays
-# transport-agnostic and doesn't import the meshcore-aware runner.
-PUBLIC_CHANNEL_NAME = "public"
-
-
-def _public_channel_idx(ctx: Context) -> int:
-    """The index of the configured "public" channel, or 0 by default."""
-    for channel in ctx.config.channels:
-        if channel.name.lower() == PUBLIC_CHANNEL_NAME:
-            return channel.index
-    return 0
-
 
 async def post_to_discord(url: str, payload: dict[str, Any]) -> None:
     """POST *payload* as JSON to the Discord webhook at *url*."""
@@ -47,7 +35,7 @@ async def discord(ctx: Context) -> None:
     url = ctx.config.discord_webhook_url
     if not url or ctx.message.is_dm:
         return
-    if ctx.message.channel_idx != _public_channel_idx(ctx):
+    if ctx.message.channel_idx != ctx.config.public_channel_idx():
         return
     text = ctx.message.text.strip()
     if not text:
