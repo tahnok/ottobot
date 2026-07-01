@@ -56,7 +56,7 @@ together as the `ottobot` entry point.
   startup, then every `interval`; whatever it returns or sends via
   `ctx.reply(...)` is broadcast on the configured public channel. Try it
   interactively with `uv run ottobot --simulate` and `/task <name>`. See
-  `src/ottobot/tasks/rss.py` for an example.
+  `src/ottobot/tasks/weather_alerts.py` for an example.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.

@@ -39,8 +39,3 @@ cr = 5
 # public channel is mirrored to that Discord webhook. Omit to disable.
 # [discord]
 # webhook_url = "https://discord.com/api/webhooks/123456789/abcdefg"
-
-# RSS feed task. When url is set, the bot polls the feed every 30 minutes
-# and announces new items on the public channel. Omit to disable.
-# [rss]
-# url = "https://example.com/feed.xml"

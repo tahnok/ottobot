@@ -3,8 +3,8 @@
 Each module in this package defines its handler at the top level with
 the @task marker::
 
-    @task("rss", interval=timedelta(minutes=30))
-    async def rss(ctx: TaskContext) -> str | None: ...
+    @task("weather_alerts", interval=timedelta(minutes=10))
+    async def weather_alerts(ctx: TaskContext) -> str | None: ...
 
 and is discovered and loaded automatically by load_tasks(). To add a
 task, drop a new file in this directory; there is no central list to

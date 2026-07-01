@@ -121,18 +121,6 @@ def test_discord_webhook_url_defaults_to_none() -> None:
     assert parse('name = "bot"').discord_webhook_url is None
 
 
-def test_rss_feed_url_is_parsed() -> None:
-    config = parse("""
-        [rss]
-        url = "https://example.com/feed.xml"
-        """)
-    assert config.rss_feed_url == "https://example.com/feed.xml"
-
-
-def test_rss_feed_url_defaults_to_none() -> None:
-    assert parse('name = "bot"').rss_feed_url is None
-
-
 def test_public_channel_idx_defaults_to_zero() -> None:
     assert BotConfig().public_channel_idx() == 0
 

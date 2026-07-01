@@ -1,7 +1,7 @@
 """Tests for scheduled tasks: the @task marker, registry, and loading.
 
-These cover the task machinery only — the rss task's own behavior is
-tested separately.
+These cover the task machinery only — the weather_alerts task's own
+behavior is tested separately.
 """
 
 import importlib
@@ -102,7 +102,7 @@ class TestTaskInvocation:
         seen: list[str | None] = []
 
         async def handler(ctx: TaskContext) -> str:
-            seen.append(ctx.config.rss_feed_url)
+            seen.append(ctx.config.discord_webhook_url)
             return "done"
 
         replies: list[str] = []
@@ -112,7 +112,9 @@ class TestTaskInvocation:
 
         from ottobot.config import BotConfig
 
-        ctx = TaskContext(_reply=reply, config=BotConfig(rss_feed_url="https://x"))
+        ctx = TaskContext(
+            _reply=reply, config=BotConfig(discord_webhook_url="https://x")
+        )
         result = await handler(ctx)
         assert result == "done"
         assert seen == ["https://x"]
@@ -146,10 +148,10 @@ class TestTaskLoading:
         with pytest.raises(TypeError, match="must define at least one @task"):
             load_tasks(MeshBot(name="ottobot"))
 
-    def test_load_tasks_loads_rss_and_weather_alerts(self) -> None:
+    def test_load_tasks_loads_weather_alerts(self) -> None:
         loaded = load_tasks(MeshBot(name="ottobot"))
         assert loaded == iter_module_names()
-        assert {"rss", "weather_alerts"} <= set(loaded)
+        assert "weather_alerts" in loaded
 
     def test_every_task_module_defines_a_task(self) -> None:
         for name in iter_module_names():
@@ -161,4 +163,4 @@ class TestTaskLoading:
     def test_build_bot_exposes_all_tasks(self) -> None:
         bot = build_bot(name="ottobot")
         names = {t.name for t in bot.task_registry.all()}
-        assert {"rss", "weather_alerts"} <= names
+        assert "weather_alerts" in names

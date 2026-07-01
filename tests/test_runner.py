@@ -508,19 +508,19 @@ class TestScheduledTasks:
         assert mc.commands.sent_chan_msgs == [(2, "hi")]
 
     async def test_task_sees_the_bot_config(self, mc: FakeMeshCore) -> None:
-        config = BotConfig(rss_feed_url="https://example.com/feed.xml")
+        config = BotConfig(discord_webhook_url="https://example.com/webhook")
         task_bot = MeshBot(name="ottobot", config=config)
         seen: list[str | None] = []
 
         @task_bot.task("watch", interval=timedelta(hours=1))
         async def watch(ctx: TaskContext) -> None:
-            seen.append(ctx.config.rss_feed_url)
+            seen.append(ctx.config.discord_webhook_url)
 
         runner = MeshCoreRunner(task_bot, mc)
         await runner.start()
         await asyncio.sleep(0.05)
         await runner.stop()
-        assert seen == ["https://example.com/feed.xml"]
+        assert seen == ["https://example.com/webhook"]
 
     async def test_raising_task_does_not_stop_other_tasks(
         self,
