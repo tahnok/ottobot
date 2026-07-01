@@ -66,6 +66,13 @@ class BotConfig:
     # public-channel messages to it. None disables the sink.
     discord_webhook_url: str | None = None
 
+    def public_channel_idx(self) -> int:
+        """Index of the channel named "public" in this config, or 0 by default."""
+        for channel in self.channels:
+            if channel.name.lower() == "public":
+                return channel.index
+        return 0
+
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
     try:

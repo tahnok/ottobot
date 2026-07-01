@@ -34,8 +34,11 @@ transport-agnostic and knows nothing about meshcore/radios. `runner.py` is
 the only module that talks to the real `meshcore` library; `simulator.py`
 provides an in-memory REPL for trying commands without a device. Commands
 live one-per-file in `src/ottobot/commands/`, auto-discovered by
-`load_commands()`. `cli.py` wires it all together as the `ottobot` entry
-point.
+`load_commands()`. Sinks (handlers that see every message) live in
+`src/ottobot/sinks/`, loaded by `load_sinks()`. Scheduled tasks (handlers
+the runner calls on a timer instead of in response to a message) live in
+`src/ottobot/tasks/`, loaded by `load_tasks()`. `cli.py` wires it all
+together as the `ottobot` entry point.
 
 ## Key conventions
 
@@ -46,6 +49,14 @@ point.
   it registers just that module against a fresh `MeshBot(name=...)` and dispatches
   test messages via `tests/helpers.py`'s `dm()`/`channel_msg()`/
   `ReplyRecorder`). Try it interactively with `uv run ottobot --simulate`.
+- **Adding a scheduled task**: create `src/ottobot/tasks/<name>.py` with a
+  top-level `@task("name", interval=timedelta(...), help="...")` async
+  handler taking `ctx: TaskContext` (no incoming message — there isn't
+  one) and returning `str | None`. The runner calls it immediately on
+  startup, then every `interval`; whatever it returns or sends via
+  `ctx.reply(...)` is broadcast on the configured public channel. Try it
+  interactively with `uv run ottobot --simulate` and `/task <name>`. See
+  `src/ottobot/tasks/weather_alerts.py` for an example.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.

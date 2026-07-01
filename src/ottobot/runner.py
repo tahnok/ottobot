@@ -18,7 +18,8 @@ from meshcore.events import Event, Subscription
 
 from .bot import MeshBot
 from .config import BotConfig
-from .context import IncomingMessage
+from .context import IncomingMessage, TaskContext
+from .registry import ScheduledTask
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,7 @@ class MeshCoreRunner:
         self.bot = bot
         self.mc = meshcore
         self._subscriptions: list[Subscription] = []
+        self._scheduled_tasks: list[asyncio.Task[None]] = []
 
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
@@ -172,6 +174,10 @@ class MeshCoreRunner:
         # the *_MSG_RECV events never fire.
         await self.mc.start_auto_message_fetching()
         await self._log_channels()
+        self._scheduled_tasks = [
+            asyncio.create_task(self._run_scheduled_task(scheduled))
+            for scheduled in self.bot.task_registry.all()
+        ]
         logger.info("bot started as %r, listening for messages", self.bot.name)
 
     async def _log_channels(self) -> None:
@@ -194,7 +200,38 @@ class MeshCoreRunner:
         for subscription in self._subscriptions:
             self.mc.unsubscribe(subscription)
         self._subscriptions = []
+        for scheduled_task in self._scheduled_tasks:
+            scheduled_task.cancel()
+        self._scheduled_tasks = []
         await self.mc.stop_auto_message_fetching()
+
+    async def _run_scheduled_task(self, scheduled: ScheduledTask) -> None:
+        """Run *scheduled* immediately, then again every scheduled.interval, forever."""
+        while True:
+            await self._run_task_once(scheduled)
+            await asyncio.sleep(scheduled.interval.total_seconds())
+
+    async def _run_task_once(self, scheduled: ScheduledTask) -> None:
+        ctx = TaskContext(_reply=self._broadcast, config=self.bot.config)
+        try:
+            result = await scheduled.handler(ctx)
+        except Exception:
+            logger.exception("scheduled task %r raised", scheduled.name)
+            return
+        if result is not None:
+            await self._broadcast(result)
+
+    async def _broadcast(self, text: str) -> None:
+        """Send *text* to the public channel.
+
+        Scheduled tasks have no inbound message to reply to, so their
+        output goes to the configured public channel instead.
+        """
+        idx = self.bot.config.public_channel_idx()
+        logger.info("broadcast to channel %d: %r", idx, text)
+        result = await self.mc.commands.send_chan_msg(idx, text)
+        if result.type == EventType.ERROR:
+            logger.error("failed to broadcast to channel %d: %r", idx, result.payload)
 
     async def run_forever(self) -> None:
         """Start the bot and block until cancelled."""

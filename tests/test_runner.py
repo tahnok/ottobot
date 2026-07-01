@@ -1,10 +1,12 @@
+import asyncio
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from meshcore import EventType
 from meshcore.events import Event
 
-from ottobot import Context, MeshBot
+from ottobot import Context, MeshBot, TaskContext
 from ottobot.config import BotConfig, ChannelConfig, RadioConfig
 from ottobot.runner import (
     PUBLIC_CHANNEL_KEY,
@@ -459,3 +461,103 @@ class TestApplySettings:
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []
         assert mc.commands.radios == []
+
+
+class TestScheduledTasks:
+    async def test_task_runs_on_start_and_broadcasts_return_value(
+        self, bot: MeshBot, mc: FakeMeshCore
+    ) -> None:
+        @bot.task("greet", interval=timedelta(hours=1))
+        async def greet(ctx: TaskContext) -> str:
+            return "hello mesh"
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "hello mesh")]
+
+    async def test_task_reply_is_also_broadcast(
+        self, bot: MeshBot, mc: FakeMeshCore
+    ) -> None:
+        @bot.task("greet", interval=timedelta(hours=1))
+        async def greet(ctx: TaskContext) -> None:
+            await ctx.reply("first")
+            await ctx.reply("second")
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "first"), (0, "second")]
+
+    async def test_task_broadcasts_on_the_configured_public_channel(
+        self, mc: FakeMeshCore
+    ) -> None:
+        config = BotConfig(channels=(ChannelConfig(index=2, name="public"),))
+        task_bot = MeshBot(name="ottobot", config=config)
+
+        @task_bot.task("greet", interval=timedelta(hours=1))
+        async def greet(ctx: TaskContext) -> str:
+            return "hi"
+
+        runner = MeshCoreRunner(task_bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(2, "hi")]
+
+    async def test_task_sees_the_bot_config(self, mc: FakeMeshCore) -> None:
+        config = BotConfig(discord_webhook_url="https://example.com/webhook")
+        task_bot = MeshBot(name="ottobot", config=config)
+        seen: list[str | None] = []
+
+        @task_bot.task("watch", interval=timedelta(hours=1))
+        async def watch(ctx: TaskContext) -> None:
+            seen.append(ctx.config.discord_webhook_url)
+
+        runner = MeshCoreRunner(task_bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert seen == ["https://example.com/webhook"]
+
+    async def test_raising_task_does_not_stop_other_tasks(
+        self,
+        bot: MeshBot,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        @bot.task("boom", interval=timedelta(hours=1))
+        async def boom(ctx: TaskContext) -> None:
+            raise RuntimeError("kaboom")
+
+        @bot.task("ok", interval=timedelta(hours=1))
+        async def ok(ctx: TaskContext) -> str:
+            return "fine"
+
+        runner = MeshCoreRunner(bot, mc)
+        with caplog.at_level("ERROR", logger="ottobot.runner"):
+            await runner.start()
+            await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "fine")]
+        assert any("boom" in r.message for r in caplog.records)
+
+    async def test_stop_cancels_scheduled_tasks(
+        self, bot: MeshBot, mc: FakeMeshCore
+    ) -> None:
+        calls = 0
+
+        @bot.task("counter", interval=timedelta(seconds=0))
+        async def counter(ctx: TaskContext) -> None:
+            nonlocal calls
+            calls += 1
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        seen_after_stop = calls
+        await asyncio.sleep(0.05)
+        assert calls == seen_after_stop

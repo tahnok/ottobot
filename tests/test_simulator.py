@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 import pytest
 
-from ottobot import Context, MeshBot
+from ottobot import Context, MeshBot, TaskContext
 from ottobot.cli import parse_args
 from ottobot.simulator import Simulator
 
@@ -108,6 +110,46 @@ class TestControls:
         await sim.handle_line("/name alice")
         await sim.handle_line("/dm")
         assert sim.prompt == "alice@dm> "
+
+
+class TestTaskControl:
+    async def test_runs_named_task_and_prints_replies(self, sim: Simulator) -> None:
+        @sim.bot.task("greet", interval=timedelta(hours=1))
+        async def greet(ctx: TaskContext) -> str:
+            return "hello mesh"
+
+        assert await sim.handle_line("/task greet") == ["task> hello mesh"]
+
+    async def test_task_using_ctx_reply_for_multiple_lines(
+        self, sim: Simulator
+    ) -> None:
+        @sim.bot.task("multi", interval=timedelta(hours=1))
+        async def multi(ctx: TaskContext) -> None:
+            await ctx.reply("one")
+            await ctx.reply("two")
+
+        assert await sim.handle_line("/task multi") == ["task> one", "task> two"]
+
+    async def test_task_with_no_output(self, sim: Simulator) -> None:
+        @sim.bot.task("quiet", interval=timedelta(hours=1))
+        async def quiet(ctx: TaskContext) -> None:
+            return None
+
+        assert await sim.handle_line("/task quiet") == ["task 'quiet' ran, no output"]
+
+    async def test_unknown_task_name(self, sim: Simulator) -> None:
+        assert await sim.handle_line("/task nosuchtask") == [
+            "no such task 'nosuchtask'"
+        ]
+
+    async def test_no_name_lists_available_tasks(self, sim: Simulator) -> None:
+        @sim.bot.task("greet", interval=timedelta(hours=1))
+        async def greet(ctx: TaskContext) -> str:
+            return "hi"
+
+        (notice,) = await sim.handle_line("/task")
+        assert "usage" in notice
+        assert "greet" in notice
 
 
 def test_cli_accepts_simulate_flag() -> None:

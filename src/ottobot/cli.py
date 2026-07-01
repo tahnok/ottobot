@@ -27,6 +27,7 @@ from .config import BotConfig, load_config
 from .runner import MeshCoreRunner, apply_settings, connect
 from .sinks import load_sinks
 from .simulator import Simulator
+from .tasks import load_tasks
 
 
 def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> MeshBot:
@@ -34,6 +35,7 @@ def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> 
     bot = MeshBot(name=name, prefix=prefix, config=config)
     load_commands(bot)
     load_sinks(bot)
+    load_tasks(bot)
     return bot
 
 

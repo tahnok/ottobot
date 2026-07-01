@@ -24,25 +24,13 @@ from ottobot import Context, sink
 
 logger = logging.getLogger(__name__)
 
-# Matches runner.PUBLIC_CHANNEL_NAME; kept local so this module stays
-# transport-agnostic and doesn't import the meshcore-aware runner.
-PUBLIC_CHANNEL_NAME = "public"
-
-
-def _public_channel_idx(ctx: Context) -> int:
-    """The index of the configured "public" channel, or 0 by default."""
-    for channel in ctx.config.channels:
-        if channel.name.lower() == PUBLIC_CHANNEL_NAME:
-            return channel.index
-    return 0
-
 
 def _channel_name(ctx: Context, idx: int) -> str:
     """The configured name for channel *idx*, defaulting to "public"."""
     for channel in ctx.config.channels:
         if channel.index == idx:
             return channel.name
-    return PUBLIC_CHANNEL_NAME
+    return "public"
 
 
 async def post_to_discord(url: str, payload: dict[str, Any]) -> None:
@@ -57,7 +45,7 @@ async def discord(ctx: Context) -> None:
     idx = ctx.message.channel_idx
     if not url or idx is None:
         return
-    if idx != _public_channel_idx(ctx):
+    if idx != ctx.config.public_channel_idx():
         return
     text = ctx.message.text.strip()
     if not text:
