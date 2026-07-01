@@ -40,8 +40,23 @@ async def test_public_channel_message_is_posted(
         )
     )
     await bot.dispatch(channel_msg("hello mesh"), reply)
-    assert posts == [(WEBHOOK, {"username": "alice", "content": "hello mesh"})]
+    assert posts == [(WEBHOOK, {"username": "alice", "content": "[public] hello mesh"})]
     assert reply.replies == []
+
+
+async def test_channel_name_prefix_uses_configured_name(
+    posts: list[tuple[str, dict]], reply: ReplyRecorder
+) -> None:
+    # The public channel need not literally be named "public"; whatever
+    # name is configured for index 0 is used as the prefix.
+    bot = make_bot(
+        BotConfig(
+            discord_webhook_url=WEBHOOK,
+            channels=(ChannelConfig(index=0, name="general"),),
+        )
+    )
+    await bot.dispatch(channel_msg("hi"), reply)
+    assert posts == [(WEBHOOK, {"username": "alice", "content": "[general] hi"})]
 
 
 async def test_command_messages_are_also_posted(
@@ -50,7 +65,7 @@ async def test_command_messages_are_also_posted(
     # Sinks see every message, including command invocations.
     bot = make_bot(BotConfig(discord_webhook_url=WEBHOOK))
     await bot.dispatch(channel_msg("!ping"), reply)
-    assert posts == [(WEBHOOK, {"username": "alice", "content": "!ping"})]
+    assert posts == [(WEBHOOK, {"username": "alice", "content": "[public] !ping"})]
 
 
 async def test_dm_is_not_posted(
