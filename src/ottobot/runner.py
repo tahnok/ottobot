@@ -67,6 +67,7 @@ class MeshCoreLike(Protocol):
         self, event_type: EventType, callback: Callable[[Event], Any]
     ) -> Any: ...
     def unsubscribe(self, subscription: Any) -> None: ...
+    def set_decrypt_channel_logs(self, v: bool) -> None: ...
     async def ensure_contacts(self) -> bool: ...
     def get_contact_by_key_prefix(self, prefix: str) -> dict[str, Any] | None: ...
     async def start_auto_message_fetching(self) -> Any: ...
@@ -164,6 +165,11 @@ class MeshCoreRunner:
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
         await self.mc.ensure_contacts()
+        # Lets the library recover the real repeater path for channel
+        # messages (by matching against logged raw packets) instead of just
+        # a hop count. No effect on DMs, and a no-op if the device never
+        # forwards raw packet logs.
+        self.mc.set_decrypt_channel_logs(True)
         self._subscriptions = [
             self.mc.subscribe(EventType.CONTACT_MSG_RECV, self._on_contact_msg),
             self.mc.subscribe(EventType.CHANNEL_MSG_RECV, self._on_channel_msg),

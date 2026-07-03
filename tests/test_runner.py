@@ -91,10 +91,14 @@ class FakeMeshCore:
         )
         self.ensure_contacts_calls = 0
         self.fetching = False
+        self.decrypt_channel_logs = False
 
     def subscribe(self, event_type: EventType, callback: Any) -> tuple[EventType, Any]:
         self.callbacks[event_type] = callback
         return (event_type, callback)
+
+    def set_decrypt_channel_logs(self, v: bool) -> None:
+        self.decrypt_channel_logs = v
 
     def unsubscribe(self, subscription: tuple[EventType, Any]) -> None:
         self.callbacks.pop(subscription[0], None)
@@ -203,6 +207,7 @@ class TestLifecycle:
         assert EventType.CONTACT_MSG_RECV in mc.callbacks
         assert EventType.CHANNEL_MSG_RECV in mc.callbacks
         assert mc.fetching
+        assert mc.decrypt_channel_logs
 
     async def test_stop_unsubscribes_and_stops_fetching(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
