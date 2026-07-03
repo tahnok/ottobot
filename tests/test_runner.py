@@ -29,6 +29,7 @@ class FakeCommands:
         self.private_keys: list[bytes] = []
         self.channels: list[tuple[int, str, bytes | None]] = []
         self.radios: list[tuple[float, float, int, int]] = []
+        self.path_hash_modes: list[int] = []
         # Channels the fake device reports back via get_channel, keyed by
         # index; each value is the CHANNEL_INFO-style name. Empty by default.
         self.device_channels: dict[int, str] = {}
@@ -71,6 +72,10 @@ class FakeCommands:
 
     async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> FakeEvent:
         self.radios.append((freq, bw, sf, cr))
+        return FakeEvent(EventType.OK)
+
+    async def set_path_hash_mode(self, mode: int) -> FakeEvent:
+        self.path_hash_modes.append(mode)
         return FakeEvent(EventType.OK)
 
 
@@ -420,6 +425,7 @@ class TestApplySettings:
             (1, "private", b"\x02" * 16),
         ]
         assert mc.commands.radios == [(910.525, 250.0, 11, 5)]
+        assert mc.commands.path_hash_modes == [1]
 
     async def test_public_channel_gets_canonical_key_when_secret_omitted(
         self, mc: FakeMeshCore
@@ -453,9 +459,13 @@ class TestApplySettings:
         assert mc.commands.channels == []
         assert mc.commands.radios == []
 
-    async def test_empty_config_applies_nothing(self, mc: FakeMeshCore) -> None:
+    async def test_empty_config_applies_nothing_but_path_hash_mode(
+        self, mc: FakeMeshCore
+    ) -> None:
         await apply_settings(mc, BotConfig())
         assert mc.commands.names == []
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []
         assert mc.commands.radios == []
+        # Path hash mode is always applied, unlike the config-driven fields.
+        assert mc.commands.path_hash_modes == [1]
