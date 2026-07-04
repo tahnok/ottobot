@@ -1,12 +1,20 @@
 """Poll Environment Canada's weather alert feed for Ottawa.
 
-Environment Canada publishes an Atom feed of currently active weather
-alerts (warnings, watches, statements) keyed to a lat/long. Every 10
+Environment Canada publishes an Atom "battleboard" feed of currently
+active weather alerts (warnings, watches, statements) per region. Every 10
 minutes the feed is fetched and any alert not seen on a previous fetch is
 announced. The very first fetch only records what's already active — it
 doesn't announce ongoing alerts the bot just happened to start during — so
 only newly issued alerts are ever announced. Alerts go out on the
 "#ott-alerts" channel, which must be in the config's [[channels]].
+
+The feed represents "no alerts" as a real <entry> ("No alerts in effect,
+..."), so the bot announces an all-clear once when the last alert ends.
+That entry's <id> embeds the feed's update timestamp, so this relies on
+Environment Canada only bumping the timestamp when the battleboard
+actually changes. If the all-clear ever starts repeating, dedupe it by
+title instead of id (announce it only when the previous announcement
+wasn't already an all-clear).
 """
 
 from __future__ import annotations
@@ -21,10 +29,13 @@ from ottobot import TaskContext, task
 
 logger = logging.getLogger(__name__)
 
-# Ottawa
-ALERTS_URL = "https://weather.gc.ca/rss/alerts/45.403_-75.687_e.xml"
+ALERTS_URL = "https://weather.gc.ca/rss/battleboard/onrm104_e.xml"
 
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
+# Every entry title in the regional feed ends with the region name; drop it
+# to save mesh bandwidth.
+_TITLE_SUFFIX = ", Ottawa North - Kanata - Orléans"
 
 # ids of alerts already announced or seen on the priming run.
 _seen: set[str] = set()
@@ -39,6 +50,7 @@ def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
         title = (
             entry.findtext("atom:title", default="", namespaces=_ATOM_NS) or ""
         ).strip()
+        title = title.removesuffix(_TITLE_SUFFIX)
         alert_id = (
             entry.findtext("atom:id", default="", namespaces=_ATOM_NS) or ""
         ).strip()

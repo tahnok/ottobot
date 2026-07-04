@@ -1,5 +1,6 @@
 """Tests for the weather_alerts scheduled task."""
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -8,6 +9,12 @@ from ottobot.config import BotConfig
 from ottobot.context import TaskContext
 from ottobot.registry import module_tasks
 from ottobot.tasks import weather_alerts as alerts_mod
+
+# A real response from Environment Canada's battleboard alerts feed,
+# captured 2026-07-04.
+FIXTURE_FEED = (Path(__file__).parent / "fixtures" / "onrm104_e.xml").read_text(
+    encoding="utf-8"
+)
 
 # A trimmed real response from Environment Canada's alerts feed.
 FEED = """<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
@@ -82,6 +89,26 @@ class TestParseAlerts:
             (
                 "tag:weather.gc.ca,2013-04-16:45.403-75.687_w1:20260630204242",
                 "ORANGE WARNING - HEAT, Ottawa",
+            )
+        ]
+
+    def test_parses_real_battleboard_feed(self) -> None:
+        assert alerts_mod.parse_alerts(FIXTURE_FEED) == [
+            (
+                "tag:weather.gc.ca,2013-04-16:20260704092826",
+                "No alerts in effect",
+            )
+        ]
+
+    def test_strips_region_suffix_from_title(self) -> None:
+        xml = FEED.replace(
+            "ORANGE WARNING - HEAT, Ottawa",
+            "ORANGE WARNING - HEAT, Ottawa North - Kanata - Orléans",
+        )
+        assert alerts_mod.parse_alerts(xml) == [
+            (
+                "tag:weather.gc.ca,2013-04-16:45.403-75.687_w1:20260630204242",
+                "ORANGE WARNING - HEAT",
             )
         ]
 
