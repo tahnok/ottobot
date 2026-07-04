@@ -101,9 +101,12 @@ async def run(args: argparse.Namespace) -> None:
 def main() -> None:
     args = parse_args()
     # Default level; the config may raise it or lower it once loaded (see run()).
+    # force=True: the meshcore library calls basicConfig() at import time, so
+    # the root logger already has a handler and this would otherwise be a no-op.
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        force=True,
     )
     asyncio.run(run(args))
 
