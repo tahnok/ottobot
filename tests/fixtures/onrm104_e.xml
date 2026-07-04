@@ -1,0 +1,28 @@
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
+<!--
+This is a data file that is meant to be read by RSS readers or aggregators.
+See https://www.canada.ca/en/environment-climate-change/services/weather-general-tools-resources/ways-to-access-forecasts.html to learn more about our RSS service.
+-->
+<title>Ottawa North - Kanata - Orléans - Weather Alert - Environment Canada</title>
+<link rel="related" href="https://weather.gc.ca/warnings/report_e.html?onrm104" type="text/html"/>
+<link rel="self" href="https://weather.gc.ca/rss/battleboard/onrm104_e.xml" type="application/atom+xml"/>
+<link rel="alternate" href="https://meteo.gc.ca/rss/battleboard/onrm104_f.xml" type="application/atom+xml"/>
+<author>
+  <name>Environment Canada</name>
+  <uri>https://weather.gc.ca</uri>
+</author>
+<updated>2026-07-04T09:28:26Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20260704092826</id>
+<logo>https://weather.gc.ca/cacheable/images/img/wmms-alt.png</logo>
+<icon>https://weather.gc.ca/template/gcweb/v15.0.0/GCWeb/assets/favicon.ico</icon>
+<rights>Copyright 2026, Environment Canada</rights>
+<entry>
+  <title>No alerts in effect, Ottawa North - Kanata - Orléans</title>
+  <link type="text/html" href="https://weather.gc.ca/warnings/report_e.html?onrm104"/>
+  <updated>2026-07-04T09:28:26Z</updated>
+  <published>2026-07-04T09:28:26Z</published>
+  <category term="Alerts"/>
+  <summary type="html">No alerts in effect.</summary>
+  <id>tag:weather.gc.ca,2013-04-16:20260704092826</id>
+</entry>
+</feed>

@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .context import Context
+    from .context import Context, TaskContext
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
+TaskHandler = Callable[["TaskContext"], Awaitable[str | None]]
 
 _COMMAND_ATTR = "_meshbot_command"
 _SINK_ATTR = "_meshbot_sink"
+_TASK_ATTR = "_meshbot_task"
 
 
 @dataclass
@@ -39,6 +42,21 @@ class Sink:
     """A function that's called on every message the bot receives."""
 
     handler: CommandHandler
+
+
+@dataclass
+class ScheduledTask:
+    """A named handler that's run on a timer instead of in response to a message.
+
+    channel names the config channel the task's output is sent on; the
+    runner looks its index up in the config's [[channels]] entries.
+    """
+
+    name: str
+    handler: TaskHandler
+    interval: timedelta
+    channel: str
+    help: str = ""
 
 
 def command(
@@ -95,6 +113,36 @@ def sink() -> Callable[[CommandHandler], CommandHandler]:
     return decorator
 
 
+def task(
+    name: str, *, interval: timedelta, channel: str, help: str = ""
+) -> Callable[[TaskHandler], TaskHandler]:
+    """Mark a module-level coroutine as a scheduled task handler.
+
+    This only attaches metadata to the function — no bot instance is
+    needed at import time. The task modules under ottobot.tasks use
+    this; load_tasks() later collects the marked handlers via
+    module_tasks() and registers them on the bot. interval is how often
+    the runner calls the handler; channel is the name of the config
+    channel the task's output is sent on.
+    """
+
+    def decorator(handler: TaskHandler) -> TaskHandler:
+        setattr(
+            handler,
+            _TASK_ATTR,
+            ScheduledTask(
+                name=name,
+                handler=handler,
+                interval=interval,
+                channel=channel,
+                help=help,
+            ),
+        )
+        return handler
+
+    return decorator
+
+
 def module_commands(module: ModuleType) -> list[Command]:
     """The @command-marked handlers defined in *module*, in definition order.
 
@@ -121,6 +169,21 @@ def module_sinks(module: ModuleType) -> list[Sink]:
         cmd
         for obj in vars(module).values()
         if (cmd := getattr(obj, _SINK_ATTR, None)) is not None
+        and getattr(obj, "__module__", None) == module.__name__
+    ]
+
+
+def module_tasks(module: ModuleType) -> list[ScheduledTask]:
+    """The @task-marked handlers defined in *module*, in definition order.
+
+    Handlers merely imported into the module (e.g. from a shared helper)
+    are excluded, so importing another task's handler can't register it
+    twice.
+    """
+    return [
+        t
+        for obj in vars(module).values()
+        if (t := getattr(obj, _TASK_ATTR, None)) is not None
         and getattr(obj, "__module__", None) == module.__name__
     ]
 
@@ -161,3 +224,17 @@ class SinkRegistry:
     def all(self) -> list[Sink]:
         """All registered sinks."""
         return self._sinks
+
+
+@dataclass
+class TaskRegistry:
+    """Holds scheduled tasks."""
+
+    _tasks: list[ScheduledTask] = field(default_factory=list)
+
+    def register(self, task: ScheduledTask) -> None:
+        self._tasks.append(task)
+
+    def all(self) -> list[ScheduledTask]:
+        """All registered tasks."""
+        return self._tasks

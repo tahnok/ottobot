@@ -110,3 +110,19 @@ class Context:
     async def reply(self, text: str) -> None:
         """Send text back where the message came from (DM or channel)."""
         await self._reply(text)
+
+
+@dataclass(frozen=True)
+class TaskContext:
+    """What a scheduled task handler gets to work with.
+
+    Unlike Context, there's no incoming message — scheduled tasks run on a
+    timer, not in response to mesh traffic. reply() sends wherever the
+    runner has wired this task's output (the task's declared channel).
+    """
+
+    _reply: ReplyFunc
+    config: BotConfig = field(default_factory=BotConfig)
+
+    async def reply(self, text: str) -> None:
+        await self._reply(text)

@@ -1,10 +1,12 @@
+import asyncio
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from meshcore import EventType
 from meshcore.events import Event
 
-from ottobot import Context, MeshBot
+from ottobot import Context, MeshBot, TaskContext
 from ottobot.config import BotConfig, ChannelConfig, RadioConfig
 from ottobot.runner import (
     PUBLIC_CHANNEL_KEY,
@@ -474,3 +476,134 @@ class TestApplySettings:
         assert mc.commands.radios == []
         # Path hash mode is always applied, unlike the config-driven fields.
         assert mc.commands.path_hash_modes == [1]
+
+
+def task_bot(*channels: ChannelConfig) -> MeshBot:
+    """A bot whose config knows the given channels, for scheduled-task tests."""
+    return MeshBot(name="ottobot", config=BotConfig(channels=channels))
+
+
+class TestScheduledTasks:
+    async def test_task_runs_on_start_and_broadcasts_return_value(
+        self, mc: FakeMeshCore
+    ) -> None:
+        bot = task_bot(ChannelConfig(index=0, name="#news"))
+
+        @bot.task("greet", interval=timedelta(hours=1), channel="#news")
+        async def greet(ctx: TaskContext) -> str:
+            return "hello mesh"
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "hello mesh")]
+
+    async def test_task_reply_is_also_broadcast(self, mc: FakeMeshCore) -> None:
+        bot = task_bot(ChannelConfig(index=0, name="#news"))
+
+        @bot.task("greet", interval=timedelta(hours=1), channel="#news")
+        async def greet(ctx: TaskContext) -> None:
+            await ctx.reply("first")
+            await ctx.reply("second")
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "first"), (0, "second")]
+
+    async def test_task_broadcasts_on_its_declared_channel(
+        self, mc: FakeMeshCore
+    ) -> None:
+        bot = task_bot(
+            ChannelConfig(index=0, name="public"),
+            ChannelConfig(index=2, name="#ott-alerts"),
+        )
+
+        @bot.task("greet", interval=timedelta(hours=1), channel="#ott-alerts")
+        async def greet(ctx: TaskContext) -> str:
+            return "hi"
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(2, "hi")]
+
+    async def test_task_channel_missing_from_config_drops_output(
+        self,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        bot = task_bot(ChannelConfig(index=0, name="public"))
+
+        @bot.task("greet", interval=timedelta(hours=1), channel="#nowhere")
+        async def greet(ctx: TaskContext) -> str:
+            return "hi"
+
+        runner = MeshCoreRunner(bot, mc)
+        with caplog.at_level("ERROR", logger="ottobot.runner"):
+            await runner.start()
+            await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == []
+        assert any(
+            "'#nowhere' is not in the config" in r.message for r in caplog.records
+        )
+
+    async def test_task_sees_the_bot_config(self, mc: FakeMeshCore) -> None:
+        config = BotConfig(discord_webhook_url="https://example.com/webhook")
+        bot = MeshBot(name="ottobot", config=config)
+        seen: list[str | None] = []
+
+        @bot.task("watch", interval=timedelta(hours=1), channel="public")
+        async def watch(ctx: TaskContext) -> None:
+            seen.append(ctx.config.discord_webhook_url)
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        assert seen == ["https://example.com/webhook"]
+
+    async def test_raising_task_does_not_stop_other_tasks(
+        self,
+        mc: FakeMeshCore,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        bot = task_bot(ChannelConfig(index=0, name="public"))
+
+        @bot.task("boom", interval=timedelta(hours=1), channel="public")
+        async def boom(ctx: TaskContext) -> None:
+            raise RuntimeError("kaboom")
+
+        @bot.task("ok", interval=timedelta(hours=1), channel="public")
+        async def ok(ctx: TaskContext) -> str:
+            return "fine"
+
+        runner = MeshCoreRunner(bot, mc)
+        with caplog.at_level("ERROR", logger="ottobot.runner"):
+            await runner.start()
+            await asyncio.sleep(0.05)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "fine")]
+        assert any("boom" in r.message for r in caplog.records)
+
+    async def test_stop_cancels_scheduled_tasks(
+        self, bot: MeshBot, mc: FakeMeshCore
+    ) -> None:
+        calls = 0
+
+        @bot.task("counter", interval=timedelta(seconds=0), channel="public")
+        async def counter(ctx: TaskContext) -> None:
+            nonlocal calls
+            calls += 1
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        await runner.stop()
+        seen_after_stop = calls
+        await asyncio.sleep(0.05)
+        assert calls == seen_after_stop

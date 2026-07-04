@@ -9,9 +9,19 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 
 from .config import BotConfig
-from .registry import Command, CommandHandler, CommandRegistry, Sink, SinkRegistry
+from .registry import (
+    Command,
+    CommandHandler,
+    CommandRegistry,
+    ScheduledTask,
+    Sink,
+    SinkRegistry,
+    TaskHandler,
+    TaskRegistry,
+)
 from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
@@ -50,6 +60,7 @@ class MeshBot:
         self.config = config or BotConfig()
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
+        self.task_registry = TaskRegistry()
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -78,11 +89,33 @@ class MeshBot:
 
         return decorator
 
+    def task(
+        self, name: str, *, interval: timedelta, channel: str, help: str = ""
+    ) -> Callable[[TaskHandler], TaskHandler]:
+        """Decorator that registers a scheduled task handler."""
+
+        def decorator(handler: TaskHandler) -> TaskHandler:
+            self.add_task(
+                ScheduledTask(
+                    name=name,
+                    handler=handler,
+                    interval=interval,
+                    channel=channel,
+                    help=help,
+                )
+            )
+            return handler
+
+        return decorator
+
     def add_command(self, command: Command) -> None:
         self.registry.register(command)
 
     def add_sink(self, sink: Sink) -> None:
         self.sink_registry.register(sink)
+
+    def add_task(self, task: ScheduledTask) -> None:
+        self.task_registry.register(task)
 
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
