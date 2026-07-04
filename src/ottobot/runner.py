@@ -212,23 +212,34 @@ class MeshCoreRunner:
             await asyncio.sleep(scheduled.interval.total_seconds())
 
     async def _run_task_once(self, scheduled: ScheduledTask) -> None:
-        ctx = TaskContext(_reply=self._broadcast, config=self.bot.config)
+        async def broadcast(text: str) -> None:
+            await self._broadcast(text, scheduled.channel)
+
+        ctx = TaskContext(_reply=broadcast, config=self.bot.config)
         try:
             result = await scheduled.handler(ctx)
         except Exception:
             logger.exception("scheduled task %r raised", scheduled.name)
             return
         if result is not None:
-            await self._broadcast(result)
+            await broadcast(result)
 
-    async def _broadcast(self, text: str) -> None:
-        """Send *text* to the public channel.
+    async def _broadcast(self, text: str, channel: str) -> None:
+        """Send *text* on the config channel named *channel*.
 
         Scheduled tasks have no inbound message to reply to, so their
-        output goes to the configured public channel instead.
+        output goes to their declared channel instead. A channel missing
+        from the config drops the message rather than guessing an index.
         """
-        idx = self.bot.config.public_channel_idx()
-        logger.info("broadcast to channel %d: %r", idx, text)
+        idx = self.bot.config.channel_idx(channel)
+        if idx is None:
+            logger.error(
+                "channel %r is not in the config; dropping broadcast %r",
+                channel,
+                text,
+            )
+            return
+        logger.info("broadcast to channel %d (%s): %r", idx, channel, text)
         result = await self.mc.commands.send_chan_msg(idx, text)
         if result.type == EventType.ERROR:
             logger.error("failed to broadcast to channel %d: %r", idx, result.payload)

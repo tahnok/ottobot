@@ -6,6 +6,7 @@ import pytest
 
 from ottobot.config import BotConfig
 from ottobot.context import TaskContext
+from ottobot.registry import module_tasks
 from ottobot.tasks import weather_alerts as alerts_mod
 
 # A trimmed real response from Environment Canada's alerts feed.
@@ -68,6 +69,11 @@ def make_ctx(replies: list[str]) -> TaskContext:
         replies.append(text)
 
     return TaskContext(_reply=reply, config=BotConfig())
+
+
+def test_task_announces_on_the_ott_alerts_channel() -> None:
+    (scheduled,) = module_tasks(alerts_mod)
+    assert scheduled.channel == "#ott-alerts"
 
 
 class TestParseAlerts:

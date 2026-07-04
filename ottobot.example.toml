@@ -27,6 +27,12 @@ name = "public"
 # channel name (the MeshCore default for "#"-prefixed names).
 # secret = "0123456789abcdef0123456789abcdef"
 
+# Scheduled tasks broadcast on the channel they declare, looked up here by
+# name. The built-in weather_alerts task posts to "#ott-alerts".
+[[channels]]
+index = 1
+name = "#ott-alerts"
+
 # Radio parameters. Omit the whole section to leave the radio alone. These
 # values are how you pin a "region" — set them to your local mesh's preset.
 [radio]

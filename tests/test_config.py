@@ -121,6 +121,32 @@ def test_discord_webhook_url_defaults_to_none() -> None:
     assert parse('name = "bot"').discord_webhook_url is None
 
 
+def test_channel_idx_finds_named_channel() -> None:
+    config = parse("""
+        [[channels]]
+        index = 0
+        name = "public"
+
+        [[channels]]
+        index = 2
+        name = "#ott-alerts"
+        """)
+    assert config.channel_idx("#ott-alerts") == 2
+
+
+def test_channel_idx_is_case_insensitive() -> None:
+    config = parse("""
+        [[channels]]
+        index = 1
+        name = "#Ott-Alerts"
+        """)
+    assert config.channel_idx("#ott-alerts") == 1
+
+
+def test_channel_idx_returns_none_when_channel_missing() -> None:
+    assert BotConfig().channel_idx("#ott-alerts") is None
+
+
 def test_public_channel_idx_defaults_to_zero() -> None:
     assert BotConfig().public_channel_idx() == 0
 

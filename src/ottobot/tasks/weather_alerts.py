@@ -1,12 +1,12 @@
 """Poll Environment Canada's weather alert feed for Ottawa.
 
 Environment Canada publishes an Atom feed of currently active weather
-alerts (warnings, watches, statements) keyed to a lat/long — this task is
-wired to Ottawa's, since that's the network this bot serves. Every 10
+alerts (warnings, watches, statements) keyed to a lat/long. Every 10
 minutes the feed is fetched and any alert not seen on a previous fetch is
 announced. The very first fetch only records what's already active — it
 doesn't announce ongoing alerts the bot just happened to start during — so
-only newly issued alerts are ever announced. Always on; no config needed.
+only newly issued alerts are ever announced. Alerts go out on the
+"#ott-alerts" channel, which must be in the config's [[channels]].
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from ottobot import TaskContext, task
 
 logger = logging.getLogger(__name__)
 
-# Ottawa's coordinates, matching the alerts feed link on its weather.gc.ca page.
+# Ottawa
 ALERTS_URL = "https://weather.gc.ca/rss/alerts/45.403_-75.687_e.xml"
 
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
@@ -50,6 +50,7 @@ def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
 @task(
     "weather_alerts",
     interval=timedelta(minutes=10),
+    channel="#ott-alerts",
     help="Announce new Environment Canada weather alerts for Ottawa",
 )
 async def weather_alerts(ctx: TaskContext) -> None:

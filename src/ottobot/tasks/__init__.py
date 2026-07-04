@@ -3,7 +3,7 @@
 Each module in this package defines its handler at the top level with
 the @task marker::
 
-    @task("weather_alerts", interval=timedelta(minutes=10))
+    @task("weather_alerts", interval=timedelta(minutes=10), channel="#ott-alerts")
     async def weather_alerts(ctx: TaskContext) -> str | None: ...
 
 and is discovered and loaded automatically by load_tasks(). To add a

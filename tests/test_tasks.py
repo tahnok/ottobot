@@ -20,10 +20,16 @@ class TestTaskMarker:
     def test_decorator_returns_handler_unchanged(self) -> None:
         async def handler(ctx: TaskContext) -> None: ...
 
-        assert task("noop", interval=timedelta(minutes=1))(handler) is handler
+        decorator = task("noop", interval=timedelta(minutes=1), channel="public")
+        assert decorator(handler) is handler
 
     def test_decorator_attaches_task_metadata(self) -> None:
-        @task("noop", interval=timedelta(minutes=5), help="does nothing")
+        @task(
+            "noop",
+            interval=timedelta(minutes=5),
+            channel="#ott-alerts",
+            help="does nothing",
+        )
         async def handler(ctx: TaskContext) -> None: ...
 
         meta = getattr(handler, "_meshbot_task")
@@ -31,15 +37,16 @@ class TestTaskMarker:
         assert meta.name == "noop"
         assert meta.handler is handler
         assert meta.interval == timedelta(minutes=5)
+        assert meta.channel == "#ott-alerts"
         assert meta.help == "does nothing"
 
     def test_module_tasks_collects_marked_handlers(self) -> None:
         module = types.ModuleType("fake")
 
-        @task("first", interval=timedelta(minutes=1))
+        @task("first", interval=timedelta(minutes=1), channel="public")
         async def first(ctx: TaskContext) -> None: ...
 
-        @task("second", interval=timedelta(minutes=1))
+        @task("second", interval=timedelta(minutes=1), channel="public")
         async def second(ctx: TaskContext) -> None: ...
 
         # module_tasks only keeps handlers defined in the module itself.
@@ -65,7 +72,7 @@ class TestTaskMarker:
         # A handler defined elsewhere but imported into a module must not be
         # picked up, so importing another task's handler can't register it
         # twice.
-        @task("noop", interval=timedelta(minutes=1))
+        @task("noop", interval=timedelta(minutes=1), channel="public")
         async def handler(ctx: TaskContext) -> None: ...
 
         handler.__module__ = "somewhere_else"
@@ -82,18 +89,27 @@ class TestTaskRegistry:
         async def handler(ctx: TaskContext) -> None: ...
 
         scheduled = ScheduledTask(
-            name="noop", handler=handler, interval=timedelta(minutes=1)
+            name="noop",
+            handler=handler,
+            interval=timedelta(minutes=1),
+            channel="public",
         )
         bot.add_task(scheduled)
         assert bot.task_registry.all() == [scheduled]
 
     def test_bot_task_decorator_registers(self, bot: MeshBot) -> None:
-        @bot.task("noop", interval=timedelta(minutes=1), help="does nothing")
+        @bot.task(
+            "noop",
+            interval=timedelta(minutes=1),
+            channel="#ott-alerts",
+            help="does nothing",
+        )
         async def handler(ctx: TaskContext) -> None: ...
 
         (registered,) = bot.task_registry.all()
         assert registered.name == "noop"
         assert registered.handler is handler
+        assert registered.channel == "#ott-alerts"
         assert registered.help == "does nothing"
 
 
@@ -124,7 +140,7 @@ class TestTaskLoading:
     def test_register_module_registers_marked_tasks(self, bot: MeshBot) -> None:
         module = types.ModuleType("fake")
 
-        @task("noop", interval=timedelta(minutes=1))
+        @task("noop", interval=timedelta(minutes=1), channel="public")
         async def handler(ctx: TaskContext) -> None: ...
 
         handler.__module__ = "fake"

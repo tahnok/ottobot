@@ -90,13 +90,19 @@ class MeshBot:
         return decorator
 
     def task(
-        self, name: str, *, interval: timedelta, help: str = ""
+        self, name: str, *, interval: timedelta, channel: str, help: str = ""
     ) -> Callable[[TaskHandler], TaskHandler]:
         """Decorator that registers a scheduled task handler."""
 
         def decorator(handler: TaskHandler) -> TaskHandler:
             self.add_task(
-                ScheduledTask(name=name, handler=handler, interval=interval, help=help)
+                ScheduledTask(
+                    name=name,
+                    handler=handler,
+                    interval=interval,
+                    channel=channel,
+                    help=help,
+                )
             )
             return handler
 

@@ -118,7 +118,7 @@ class TaskContext:
 
     Unlike Context, there's no incoming message — scheduled tasks run on a
     timer, not in response to mesh traffic. reply() sends wherever the
-    runner has wired this task's output (e.g. the public channel).
+    runner has wired this task's output (the task's declared channel).
     """
 
     _reply: ReplyFunc

@@ -46,11 +46,16 @@ class Sink:
 
 @dataclass
 class ScheduledTask:
-    """A named handler that's run on a timer instead of in response to a message."""
+    """A named handler that's run on a timer instead of in response to a message.
+
+    channel names the config channel the task's output is sent on; the
+    runner looks its index up in the config's [[channels]] entries.
+    """
 
     name: str
     handler: TaskHandler
     interval: timedelta
+    channel: str
     help: str = ""
 
 
@@ -109,7 +114,7 @@ def sink() -> Callable[[CommandHandler], CommandHandler]:
 
 
 def task(
-    name: str, *, interval: timedelta, help: str = ""
+    name: str, *, interval: timedelta, channel: str, help: str = ""
 ) -> Callable[[TaskHandler], TaskHandler]:
     """Mark a module-level coroutine as a scheduled task handler.
 
@@ -117,14 +122,21 @@ def task(
     needed at import time. The task modules under ottobot.tasks use
     this; load_tasks() later collects the marked handlers via
     module_tasks() and registers them on the bot. interval is how often
-    the runner calls the handler.
+    the runner calls the handler; channel is the name of the config
+    channel the task's output is sent on.
     """
 
     def decorator(handler: TaskHandler) -> TaskHandler:
         setattr(
             handler,
             _TASK_ATTR,
-            ScheduledTask(name=name, handler=handler, interval=interval, help=help),
+            ScheduledTask(
+                name=name,
+                handler=handler,
+                interval=interval,
+                channel=channel,
+                help=help,
+            ),
         )
         return handler
 
