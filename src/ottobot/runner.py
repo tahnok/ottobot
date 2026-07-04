@@ -35,6 +35,11 @@ DEFAULT_MAX_CHANNELS = 8
 PUBLIC_CHANNEL_NAME = "public"
 PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 
+# Path hash mode value for 2-byte-per-hop path hashes (0=1 byte, 1=2 bytes,
+# 2=4 bytes, 3=8 bytes). Keeps message overhead low while still avoiding the
+# 1-byte mode's collision rate on busier meshes.
+PATH_HASH_MODE_2_BYTE = 1
+
 
 class _Commands(Protocol):
     """The ``mc.commands`` methods the runner calls."""
@@ -46,6 +51,7 @@ class _Commands(Protocol):
         self, channel_idx: int, channel_name: str, channel_secret: Any = ...
     ) -> Event: ...
     async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> Event: ...
+    async def set_path_hash_mode(self, mode: int) -> Event: ...
     async def send_msg(self, contact: dict[str, Any], text: str) -> Event: ...
     async def send_chan_msg(self, channel_idx: int, text: str) -> Event: ...
 
@@ -68,6 +74,7 @@ class MeshCoreLike(Protocol):
         self, event_type: EventType, callback: Callable[[Event], Any]
     ) -> Any: ...
     def unsubscribe(self, subscription: Any) -> None: ...
+    def set_decrypt_channel_logs(self, v: bool) -> None: ...
     async def ensure_contacts(self) -> bool: ...
     def get_contact_by_key_prefix(self, prefix: str) -> dict[str, Any] | None: ...
     async def start_auto_message_fetching(self) -> Any: ...
@@ -108,8 +115,13 @@ async def apply_settings(mc: MeshCoreLike, config: BotConfig) -> None:
     """Push the config's name, channels, key pair, and radio onto the device.
 
     Each field is optional; anything left unset in the config is skipped so
-    the device keeps its current value.
+    the device keeps its current value. The path hash mode is fixed to
+    2-byte hops regardless of config.
     """
+    await _apply(
+        "path hash mode=2-byte",
+        await mc.commands.set_path_hash_mode(PATH_HASH_MODE_2_BYTE),
+    )
     if config.name:
         await _apply(f"name={config.name!r}", await mc.commands.set_name(config.name))
     if config.private_key is not None:
@@ -166,6 +178,11 @@ class MeshCoreRunner:
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
         await self.mc.ensure_contacts()
+        # Lets the library recover the real repeater path for channel
+        # messages (by matching against logged raw packets) instead of just
+        # a hop count. No effect on DMs, and a no-op if the device never
+        # forwards raw packet logs.
+        self.mc.set_decrypt_channel_logs(True)
         self._subscriptions = [
             self.mc.subscribe(EventType.CONTACT_MSG_RECV, self._on_contact_msg),
             self.mc.subscribe(EventType.CHANNEL_MSG_RECV, self._on_channel_msg),
