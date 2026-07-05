@@ -10,12 +10,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import timedelta
+from pathlib import Path
 
 from .config import BotConfig
 from .registry import (
     Command,
     CommandHandler,
     CommandRegistry,
+    OnStart,
     ScheduledTask,
     Sink,
     SinkRegistry,
@@ -49,6 +51,7 @@ class MeshBot:
         prefix: str = "!",
         respond_in_channels: bool = True,  # TODO: remove this
         config: BotConfig | None = None,
+        db_path: Path | None = None,
     ) -> None:
         self.prefix = prefix
         # The bot's own name on the mesh. In channels, commands that
@@ -58,9 +61,13 @@ class MeshBot:
         self.respond_in_channels = respond_in_channels
         # The loaded TOML config, surfaced to handlers via Context.config.
         self.config = config or BotConfig()
+        # Where sinks that persist state keep their sqlite file. Wired from
+        # config by cli.build_bot; sinks read it via ctx.bot.db_path.
+        self.db_path = db_path
         self.registry = CommandRegistry()
         self.sink_registry = SinkRegistry()
         self.task_registry = TaskRegistry()
+        self._on_start: list[OnStart] = []
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -117,6 +124,14 @@ class MeshBot:
     def add_task(self, task: ScheduledTask) -> None:
         self.task_registry.register(task)
 
+    def add_on_start(self, hook: OnStart) -> None:
+        self._on_start.append(hook)
+
+    async def setup(self) -> None:
+        """Run every registered @on_start hook once, before handling messages."""
+        for hook in self._on_start:
+            await hook.handler(self)
+
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
 
@@ -163,6 +178,7 @@ class MeshBot:
             args=message.text,
             _reply=reply,
             config=self.config,
+            bot=self,
         )
         for sink in self.sink_registry.all():
             try:
@@ -201,6 +217,7 @@ class MeshBot:
             args=args,
             _reply=reply,
             config=self.config,
+            bot=self,
         )
         try:
             result = await command.handler(ctx)

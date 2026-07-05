@@ -7,3 +7,8 @@ dist/
 
 # Local config holds the bot's private key; keep it out of git.
 ottobot.toml
+
+# Sinks' sqlite state (bind-mounted here by docker-compose) and the default
+# local db file.
+data/
+ottobot.db

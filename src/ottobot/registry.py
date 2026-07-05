@@ -9,14 +9,19 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .bot import MeshBot
     from .context import Context, TaskContext
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
 TaskHandler = Callable[["TaskContext"], Awaitable[str | None]]
+# Boot-time hooks get the bot itself, so they can read its config (e.g.
+# db_path) and set up whatever they need before the first message arrives.
+OnStartHandler = Callable[["MeshBot"], Awaitable[None]]
 
 _COMMAND_ATTR = "_meshbot_command"
 _SINK_ATTR = "_meshbot_sink"
 _TASK_ATTR = "_meshbot_task"
+_ON_START_ATTR = "_meshbot_on_start"
 
 
 @dataclass
@@ -57,6 +62,13 @@ class ScheduledTask:
     interval: timedelta
     channel: str
     help: str = ""
+
+
+@dataclass
+class OnStart:
+    """A coroutine run once at boot, before the bot handles any messages."""
+
+    handler: OnStartHandler
 
 
 def command(
@@ -143,6 +155,22 @@ def task(
     return decorator
 
 
+def on_start() -> Callable[[OnStartHandler], OnStartHandler]:
+    """Mark a module-level coroutine to run once at boot.
+
+    Like @sink, this only attaches metadata at import time. The loaders
+    collect marked handlers via module_on_start() and register them on the
+    bot; MeshBot.setup() awaits them all before the first message, passing
+    the bot so the hook can read its config (e.g. db_path).
+    """
+
+    def decorator(handler: OnStartHandler) -> OnStartHandler:
+        setattr(handler, _ON_START_ATTR, OnStart(handler=handler))
+        return handler
+
+    return decorator
+
+
 def module_commands(module: ModuleType) -> list[Command]:
     """The @command-marked handlers defined in *module*, in definition order.
 
@@ -184,6 +212,20 @@ def module_tasks(module: ModuleType) -> list[ScheduledTask]:
         t
         for obj in vars(module).values()
         if (t := getattr(obj, _TASK_ATTR, None)) is not None
+        and getattr(obj, "__module__", None) == module.__name__
+    ]
+
+
+def module_on_start(module: ModuleType) -> list[OnStart]:
+    """The @on_start-marked handlers defined in *module*, in definition order.
+
+    Handlers merely imported into the module are excluded, mirroring
+    module_commands/module_sinks.
+    """
+    return [
+        hook
+        for obj in vars(module).values()
+        if (hook := getattr(obj, _ON_START_ATTR, None)) is not None
         and getattr(obj, "__module__", None) == module.__name__
     ]
 

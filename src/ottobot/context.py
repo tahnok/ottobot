@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .bot import MeshBot
 
 from .config import BotConfig
 
@@ -89,6 +92,9 @@ class Context:
     # The loaded bot config, so sinks/commands can read settings (e.g. the
     # discord sink's webhook URL). Defaults to an empty config.
     config: BotConfig = field(default_factory=BotConfig)
+    # The bot handling this message. Optional so tests can build a Context
+    # without one; dispatch always sets it, so handlers can rely on it.
+    bot: "MeshBot | None" = None
 
     @property
     def is_dm(self) -> bool:

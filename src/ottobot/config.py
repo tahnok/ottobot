@@ -69,6 +69,9 @@ class BotConfig:
     # Discord incoming-webhook URL; when set, the discord sink mirrors
     # public-channel messages to it. None disables the sink.
     discord_webhook_url: str | None = None
+    # Path to the sqlite file stateful sinks (e.g. the welcome sink) use.
+    # None means cli falls back to its default.
+    database: Path | None = None
 
     def channel_idx(self, name: str) -> int | None:
         """Index of the channel with this name (case-insensitive), or None."""
@@ -144,6 +147,8 @@ def parse_config(data: dict) -> BotConfig:
     discord = data.get("discord", {})
     webhook_url = discord.get("webhook_url")
     discord_webhook_url = str(webhook_url) if webhook_url is not None else None
+    database = data.get("database")
+
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
@@ -151,6 +156,7 @@ def parse_config(data: dict) -> BotConfig:
         radio=radio,
         log_level=log_level,
         discord_webhook_url=discord_webhook_url,
+        database=Path(database) if database is not None else None,
     )
 
 

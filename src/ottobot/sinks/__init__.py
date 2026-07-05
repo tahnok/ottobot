@@ -20,7 +20,7 @@ import pkgutil
 from types import ModuleType
 
 from ..bot import MeshBot
-from ..registry import Sink, module_sinks
+from ..registry import Sink, module_on_start, module_sinks
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +35,17 @@ def iter_module_names() -> list[str]:
 
 
 def register_module(bot: MeshBot, module: ModuleType) -> list[Sink]:
-    """Register every @sink-marked handler in *module* on *bot*.
+    """Register a sink module's @sink and @on_start handlers on *bot*.
 
-    Returns the sinks that were registered. Tests use this to load a
-    single sink module against a fresh bot.
+    Returns the sinks that were registered (its @on_start hooks, if any, are
+    registered too). Tests use this to load a single sink module against a
+    fresh bot.
     """
     sinks = module_sinks(module)
     for sink in sinks:
         bot.add_sink(sink)
+    for hook in module_on_start(module):
+        bot.add_on_start(hook)
     return sinks
 
 
