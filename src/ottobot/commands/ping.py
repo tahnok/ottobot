@@ -6,4 +6,4 @@ from ottobot import Context, command
 @command("ping", help="Check that the bot is alive")
 async def ping(ctx: Context) -> str:
     who = ctx.sender_name or "you"
-    return f"pong {who} ({ctx.path_description})"
+    return f"@[{who}] pong ({ctx.path_description})"
