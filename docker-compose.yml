@@ -1,4 +1,5 @@
-# Sample Compose file for running ottobot in a container.
+# Sample Compose file for running ottobot in a container optimized for a
+# Raspberry Pi SBC. This has only been tested with USB transport.
 #
 # By default this pulls the prebuilt image from the GitHub Container Registry.
 # To run your own local changes instead, comment out `image:` and uncomment
@@ -14,22 +15,14 @@ services:
     # build: .
     restart: unless-stopped
 
+    # --- USB-connected device ------------------------------------------------
     # ottobot needs exactly one transport. Point it at a MeshCore companion
     # device plugged into the host over USB, and pass that device through to
     # the container. Adjust the port (e.g. /dev/ttyACM0) to match your host.
-    #
-    # --config makes a TOML file the source of truth for the bot's name,
-    # channels, key pair, and radio params (pushed onto the device on
-    # startup). It lives on the host and is bind-mounted in via volumes:
-    # below — copy ottobot.example.toml to ottobot.toml next to this file
-    # first. To run without a config, drop the --config flag and the
-    # volumes: block.
     command: ["--serial", "/dev/ttyUSB0", "--config", "/app/ottobot.toml"]
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
-    volumes:
-      # Read-only: the bot only reads the config, and it holds the private key.
-      - "./ottobot.toml:/app/ottobot.toml:ro"
+
     # The container runs as a non-root user, so it needs to belong to the
     # group that owns the serial device on the host (usually `dialout`, GID
     # 20 on Debian/Ubuntu). Run `stat -c '%G %g' /dev/ttyUSB0` on the host to
@@ -42,3 +35,83 @@ services:
     # the firmware in TCP/WiFi mode), drop the `devices:` block above and use:
     #
     # command: ["--tcp", "192.168.1.50:5000", "--config", "/app/ottobot.toml"]
+
+    # --- BLE-connected device ------------------------------------------------
+    # To talk to a companion over BLE instead, comment out the USB/serial
+    # `command:`, `devices:`, and `group_add:` blocks above, then uncomment
+    # the BLE command below.
+    #
+    # command: ["--ble", "DEVICE_NAME_OR_ADDRESS", "--config", "/app/ottobot.toml"]
+    #
+    # BLE support from inside containers is host-specific. Depending on your
+    # Raspberry Pi OS, BlueZ, Docker version, and adapter setup, you may need
+    # to loosen isolation. Start with the default hardening below. If BLE does
+    # not work, try uncommenting these one at a time:
+    #   add to volumes:
+    #     - /var/run/dbus:/var/run/dbus:ro
+    #   network_mode: host
+    #   cap_add:
+    #     - NET_ADMIN
+    #     - NET_RAW
+
+    # --- Config --------------------------------------------------------------
+    # --config makes a TOML file the source of truth for the bot's name,
+    # channels, key pair, and radio params (pushed onto the device on
+    # startup). It lives on the host and is bind-mounted in via volumes:
+    # below — copy ottobot.example.toml to ottobot.toml next to this file
+    # first. To run without a config, drop the --config flag and the
+    # volumes: block.
+    volumes:
+      # Read-only: the bot only reads the config, and it holds the private key.
+      - "./ottobot.toml:/app/ottobot.toml:ro"
+
+    # --- Hardening -----------------------------------------------------------
+    # Don't run as root
+    user: 1000:1000
+
+    # The application and virtualenv are baked into the image, so the container
+    # root filesystem can be read-only. `/tmp` and `/run` remain writable via
+    # tmpfs for Python/runtime scratch data.
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+      - /run:size=8m,noexec,nosuid,nodev
+
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      XDG_CACHE_HOME: "/tmp/.cache"
+
+    # Drop Linux capabilities. Serial access is granted by `devices:` plus
+    # `group_add:`, not by capabilities.
+    #
+    # If using BLE and you uncomment `cap_add:` above, keep this block. Docker
+    # will drop everything except the explicitly added capabilities.
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    # Resource limits suitable for a small Raspberry Pi service using USB or TCP.
+    # If using BLE, raise these to the commented values below.
+    cpus: "0.25"
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 64
+
+    # --- BLE resource limits -------------------------------------------------
+    # For BLE mode, comment out the limits above and uncomment these:
+    #
+    # cpus: "0.50"
+    # mem_limit: 192m
+    # memswap_limit: 192m
+    # pids_limit: 96
+
+    # Keep Docker logs bounded on small SD cards.
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
