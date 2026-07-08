@@ -143,7 +143,7 @@ on before spamming a real channel.
 | Command | What it does |
 |---|---|
 | `!help` | List all commands |
-| `!ping` | Pong back with the path your message took (and SNR when available) |
+| `!ping` | Pong back with your handle and the path your message took |
 | `!echo <text>` | Repeat back whatever you send |
 | `!roll [sides]` | Roll a die, default d6 (alias: `!dice`) |
 
@@ -166,13 +166,8 @@ discovered automatically — there is no central list to edit. To add one:
 
    @command("ping", help="Check that the bot is alive")
    async def ping(ctx: Context) -> str:
-       pong = f"pong ({ctx.path_description})"
-       # ctx.raw is the full meshcore payload, for fields the framework
-       # doesn't model — e.g. SNR, reported by firmware protocol v3+.
-       snr = (ctx.raw or {}).get("SNR")
-       if snr is not None:
-           pong += f" SNR {snr}dB"
-       return pong
+       who = ctx.sender_name or "you"
+       return f"pong {who} ({ctx.path_description})"
    ```
 
 3. Try it out interactively with `uv run ottobot --simulate` — see
