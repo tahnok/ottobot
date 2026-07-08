@@ -135,8 +135,14 @@ class Handler(BaseHTTPRequestHandler):
             start_new_session=True,
         )
 
+        stdout = process.stdout
+
+        if stdout is None:
+            process.terminate()
+            raise RuntimeError("Failed to open process stdout")
+
         try:
-            for line in process.stdout:
+            for line in stdout:
                 line = line.rstrip("\r\n")
                 message = f"data: {line}\n\n"
 
