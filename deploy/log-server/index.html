@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ottobot</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: #eee;
+            font-family: system-ui, sans-serif;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: #1b1b1b;
+            border-bottom: 1px solid #333;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        button, select {
+            background: #2a2a2a;
+            color: #eee;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 0.35rem 0.5rem;
+        }
+
+        main {
+            padding: 1rem;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font: 0.875rem/1.4 monospace;
+        }
+
+        .status {
+            margin-left: auto;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Ottobot</h1>
+
+        <select id="service">
+            <option value="">All Docker services</option>
+        </select>
+
+        <button id="clear">Clear</button>
+        <button id="pause">Pause</button>
+
+        <span class="status" id="status">Connecting...</span>
+    </header>
+
+    <main>
+        <pre id="logs"></pre>
+    </main>
+
+    <script>
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        const service = document.getElementById('service');
+        const clear = document.getElementById('clear');
+        const pause = document.getElementById('pause');
+
+        let source = null;
+        let paused = false;
+        let buffer = [];
+
+        function appendLine(line) {
+            if (paused) {
+                buffer.push(line);
+                return;
+            }
+
+            logs.textContent += line + '\n';
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        function connect() {
+            if (source) {
+                source.close();
+            }
+
+            const params = new URLSearchParams();
+
+            if (service.value) {
+                params.set('service', service.value);
+            }
+
+            status.textContent = 'Connecting...';
+
+            source = new EventSource('/events?' + params.toString());
+
+            source.onopen = () => {
+                status.textContent = 'Connected';
+            };
+
+            source.onmessage = event => {
+                appendLine(event.data);
+            };
+
+            source.onerror = () => {
+                status.textContent = 'Disconnected';
+            };
+        }
+
+        async function loadServices() {
+            const response = await fetch('/services');
+            const services = await response.json();
+
+            for (const name of services) {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                service.appendChild(option);
+            }
+
+            const separator = document.createElement('option');
+            separator.disabled = true;
+            separator.textContent = '──────────';
+            service.appendChild(separator);
+
+            const updateLog = document.createElement('option');
+            updateLog.value = '__ottobot_update_log__';
+            updateLog.textContent = 'Ottobot update log';
+            service.appendChild(updateLog);
+        }
+
+        clear.addEventListener('click', () => {
+            logs.textContent = '';
+            buffer = [];
+        });
+
+        pause.addEventListener('click', () => {
+            paused = !paused;
+            pause.textContent = paused ? 'Resume' : 'Pause';
+
+            if (!paused && buffer.length) {
+                for (const line of buffer) {
+                    appendLine(line);
+                }
+
+                buffer = [];
+            }
+        });
+
+        service.addEventListener('change', () => {
+            logs.textContent = '';
+            buffer = [];
+            connect();
+        });
+
+        loadServices().finally(connect);
+    </script>
+</body>
+</html>

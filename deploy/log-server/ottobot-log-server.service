@@ -1,0 +1,30 @@
+# Adjust as needed and place in /etc/systemd/system/ottobot-log-server.service
+#
+# run
+#   systemctl daemon-reload
+#   systemctl start ottobot-log-server.service
+#   systemctl enable ottobot-log-server.service
+
+[Unit]
+Description=Ottobot Log Server
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dietpi
+Group=docker
+WorkingDirectory=/opt/ottobot/log-server
+ExecStart=/usr/bin/python3 /opt/ottobot/log-server/server.py
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=false
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

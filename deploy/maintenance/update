@@ -1,0 +1,59 @@
+#!/bin/bash
+set -eu
+
+OTTOBOT_DIR="/opt/ottobot"
+LOG_FILE="/var/log/ottobot-update.log"
+TMP_LOG="/tmp/ottobot-update-run-$$.log"
+
+cd "$OTTOBOT_DIR"
+
+: > "$TMP_LOG"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ottobot deployment check started" >> "$LOG_FILE"
+
+cleanup() {
+        STATUS="$?"
+
+        if [ "$STATUS" -ne 0 ]; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ottobot deployment check failed" >> "$LOG_FILE"
+                cat "$TMP_LOG" >> "$LOG_FILE"
+                echo "" >> "$LOG_FILE"
+        fi
+
+        rm -f "$TMP_LOG"
+
+        exit "$STATUS"
+}
+
+trap cleanup EXIT
+
+OLD_IMAGES="$(docker compose images -q | sort -u)"
+
+docker compose pull >> "$TMP_LOG" 2>&1
+docker compose up -d --remove-orphans >> "$TMP_LOG" 2>&1
+
+NEW_IMAGES="$(docker compose images -q | sort -u)"
+
+if [ "$OLD_IMAGES" != "$NEW_IMAGES" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ottobot deployment updated" >> "$LOG_FILE"
+
+        for IMAGE_ID in $NEW_IMAGES; do
+                if ! printf '%s\n' "$OLD_IMAGES" | grep -Fxq "$IMAGE_ID"; then
+                        echo "New image: $IMAGE_ID" >> "$LOG_FILE"
+                fi
+        done
+
+        for IMAGE_ID in $OLD_IMAGES; do
+                if ! printf '%s\n' "$NEW_IMAGES" | grep -Fxq "$IMAGE_ID"; then
+                        echo "Removing old image: $IMAGE_ID" >> "$LOG_FILE"
+                        docker image rm "$IMAGE_ID" >> "$LOG_FILE" 2>&1 || true
+                fi
+        done
+else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Ottobot deployment check completed; image already current" >> "$LOG_FILE"
+fi
+
+echo "" >> "$LOG_FILE"
+
+trap - EXIT
+rm -f "$TMP_LOG"

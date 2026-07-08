@@ -125,6 +125,41 @@ To build the image from a local checkout instead of pulling it:
 docker build -t ottobot .
 ```
 
+### Deploying with Docker
+
+The `deploy` directory contains supplemental deployment files, including
+simple backup and update cron scripts, plus a lightweight log server that
+can be used to inspect the Docker container logs remotely.
+
+#### Log Server
+
+The log server is a simple Python server intended to run as a `systemd`
+service behind a reverse proxy such as nginx or Caddy with basic authentication.
+
+A sample `systemd` service file is included to run the log server. Copy it
+to `/etc/systemd/system/`, adjust the paths and user/group as needed, then
+daemon-reload, enable and start the service.
+
+Authentication is not built into the log server itself. By default, it accepts
+remote connections, but it only responds to requests from the reverse proxy IP
+configured by `ALLOWED_PROXY_IP`. It also expects standard `X-Forwarded-*`
+headers, which are normally set by the reverse proxy.
+
+To disable the reverse proxy header check, set:
+
+```python
+REQUIRE_REVERSE_PROXY_HEADERS = False
+```
+
+To restrict the server to local connections only, set:
+
+```python
+HOST = '127.0.0.1'
+```
+
+When `HOST` is set to `127.0.0.1`, proxy IP and forwarded header checks
+are ignored.
+
 ## Trying commands without a radio
 
 ```bash

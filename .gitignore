@@ -7,3 +7,4 @@ dist/
 
 # Local config holds the bot's private key; keep it out of git.
 ottobot.toml
+.env
