@@ -7,43 +7,44 @@ import subprocess
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-HOST = '0.0.0.0'
+HOST = "0.0.0.0"
 PORT = 8765
 
 # Set this to the private IP of the reverse proxy server.
 # Only used when HOST allows remote connections.
-ALLOWED_PROXY_IP = '192.168.0.54'
+ALLOWED_PROXY_IP = "192.168.0.54"
 REQUIRE_REVERSE_PROXY_HEADERS = True
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HTML_FILE = os.path.join(BASE_DIR, 'index.html')
+HTML_FILE = os.path.join(BASE_DIR, "index.html")
 
-UPDATE_LOG_FILE = '/var/log/ottobot-update.log'
-UPDATE_LOG_SERVICE_VALUE = '__ottobot_update_log__'
+UPDATE_LOG_FILE = "/var/log/ottobot-update.log"
+UPDATE_LOG_SERVICE_VALUE = "__ottobot_update_log__"
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.is_allowed_request():
-            self.send_error(403, 'Forbidden')
+            self.send_error(403, "Forbidden")
             return
 
         parsed = urllib.parse.urlparse(self.path)
 
-        if parsed.path == '/':
+        if parsed.path == "/":
             self.handle_index()
             return
 
-        if parsed.path in ('/favicon.ico', '/favicon.svg'):
+        if parsed.path in ("/favicon.ico", "/favicon.svg"):
             self.handle_favicon()
             return
 
-        if parsed.path == '/services':
+        if parsed.path == "/services":
             self.handle_services()
             return
 
-        if parsed.path == '/events':
+        if parsed.path == "/events":
             query = urllib.parse.parse_qs(parsed.query)
-            service = query.get('service', [''])[0].strip()
+            service = query.get("service", [""])[0].strip()
             self.handle_events(service)
             return
 
@@ -51,29 +52,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_index(self):
         try:
-            with open(HTML_FILE, 'rb') as file:
+            with open(HTML_FILE, "rb") as file:
                 body = file.read()
         except OSError:
-            self.send_error(500, 'index.html not found')
+            self.send_error(500, "index.html not found")
             return
 
         self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Cache-Control', 'no-store')
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def handle_favicon(self):
         self.send_response(200)
-        self.send_header('Content-Type', 'image/svg+xml')
-        self.send_header('Cache-Control', 'public, max-age=86400')
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Cache-Control", "public, max-age=86400")
         self.end_headers()
         self.wfile.write(FAVICON_SVG)
 
     def handle_services(self):
         try:
             result = subprocess.run(
-                ['docker', 'compose', 'config', '--services'],
+                ["docker", "compose", "config", "--services"],
                 cwd=BASE_DIR,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -82,47 +83,45 @@ class Handler(BaseHTTPRequestHandler):
             )
 
             services = [
-                line.strip()
-                for line in result.stdout.splitlines()
-                if line.strip()
+                line.strip() for line in result.stdout.splitlines() if line.strip()
             ]
         except subprocess.SubprocessError:
             services = []
 
-        body = json.dumps(services).encode('utf-8')
+        body = json.dumps(services).encode("utf-8")
 
         self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Cache-Control', 'no-store')
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def handle_events(self, service):
         if service == UPDATE_LOG_SERVICE_VALUE:
             cmd = [
-                'tail',
-                '-n',
-                '200',
-                '-F',
+                "tail",
+                "-n",
+                "200",
+                "-F",
                 UPDATE_LOG_FILE,
             ]
         else:
             cmd = [
-                'docker',
-                'compose',
-                'logs',
-                '-f',
-                '--tail=200',
+                "docker",
+                "compose",
+                "logs",
+                "-f",
+                "--tail=200",
             ]
 
             if service:
                 cmd.append(service)
 
         self.send_response(200)
-        self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('Connection', 'keep-alive')
-        self.send_header('X-Accel-Buffering', 'no')
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
         process = subprocess.Popen(
@@ -132,16 +131,16 @@ class Handler(BaseHTTPRequestHandler):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            errors='replace',
+            errors="replace",
             start_new_session=True,
         )
 
         try:
             for line in process.stdout:
-                line = line.rstrip('\r\n')
-                message = f'data: {line}\n\n'
+                line = line.rstrip("\r\n")
+                message = f"data: {line}\n\n"
 
-                self.wfile.write(message.encode('utf-8'))
+                self.wfile.write(message.encode("utf-8"))
                 self.wfile.flush()
         except BrokenPipeError:
             pass
@@ -161,13 +160,13 @@ class Handler(BaseHTTPRequestHandler):
             return False
 
         if REQUIRE_REVERSE_PROXY_HEADERS:
-            if not self.headers.get('X-Forwarded-For'):
+            if not self.headers.get("X-Forwarded-For"):
                 return False
 
-            if not self.headers.get('X-Forwarded-Proto'):
+            if not self.headers.get("X-Forwarded-Proto"):
                 return False
 
-            if not self.headers.get('X-Forwarded-Host'):
+            if not self.headers.get("X-Forwarded-Host"):
                 return False
 
         return True
@@ -175,8 +174,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+
 # Icon: "Radio Signal 1026" from SVG Repo, licensed under CC0 / public domain.
-FAVICON_SVG = b'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+FAVICON_SVG = b"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 <svg width="800px" height="800px" viewBox="0 -3 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 
@@ -190,12 +190,14 @@ FAVICON_SVG = b'''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
             </g>
         </g>
     </g>
-</svg>'''
+</svg>"""
+
 
 def host_is_local_only():
-    return HOST in ('127.0.0.1', 'localhost', '::1')
+    return HOST in ("127.0.0.1", "localhost", "::1")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f'Serving Docker Compose logs on http://{HOST}:{PORT}')
+    print(f"Serving Docker Compose logs on http://{HOST}:{PORT}")
     server.serve_forever()
