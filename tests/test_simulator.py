@@ -83,6 +83,14 @@ class TestControls:
         await sim.handle_line("/hops 0")
         assert await sim.handle_line("@[ottobot] !ping") == ["bot> pong (direct)"]
 
+    async def test_hops_route_tolerates_spaces_after_commas(
+        self, sim: Simulator
+    ) -> None:
+        await sim.handle_line("/hops 2 a1, b2")
+        assert await sim.handle_line("@[ottobot] !ping") == [
+            "bot> pong (2 hops via a1,b2)"
+        ]
+
     async def test_hops_rejects_non_hex_route(self, sim: Simulator) -> None:
         (notice,) = await sim.handle_line("/hops 1 zz")
         assert "hex" in notice
@@ -136,6 +144,17 @@ class TestTaskControl:
             return None
 
         assert await sim.handle_line("/task quiet") == ["task 'quiet' ran, no output"]
+
+    async def test_raising_task_reports_instead_of_crashing(
+        self, sim: Simulator
+    ) -> None:
+        @sim.bot.task("boom", interval=timedelta(hours=1), channel="public")
+        async def boom(ctx: TaskContext) -> None:
+            raise RuntimeError("kaboom")
+
+        (notice,) = await sim.handle_line("/task boom")
+        assert "raised" in notice
+        assert "kaboom" in notice
 
     async def test_unknown_task_name(self, sim: Simulator) -> None:
         assert await sim.handle_line("/task nosuchtask") == [

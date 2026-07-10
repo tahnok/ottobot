@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import signal
 import subprocess
 import urllib.parse
@@ -20,6 +21,10 @@ HTML_FILE = os.path.join(BASE_DIR, "index.html")
 
 UPDATE_LOG_FILE = "/var/log/ottobot-update.log"
 UPDATE_LOG_SERVICE_VALUE = "__ottobot_update_log__"
+
+# Compose service names: alphanumeric start, then [a-zA-Z0-9._-]. Anything
+# else (in particular a leading "-") must not reach the docker argv below.
+SERVICE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -106,6 +111,10 @@ class Handler(BaseHTTPRequestHandler):
                 UPDATE_LOG_FILE,
             ]
         else:
+            if service and not SERVICE_NAME_RE.match(service):
+                self.send_error(400, "Invalid service name")
+                return
+
             cmd = [
                 "docker",
                 "compose",

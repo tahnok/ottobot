@@ -85,3 +85,8 @@ async def weather_alerts(ctx: TaskContext) -> None:
     for alert_id, title in reversed(new_alerts):
         _seen.add(alert_id)
         await ctx.reply(title)
+    # Drop ids that have left the feed so _seen doesn't grow forever on a
+    # long-running bot. Ids embed their issue timestamp, so an ended
+    # alert's id doesn't come back; a genuinely re-issued alert gets a
+    # fresh id and is announced again.
+    _seen.intersection_update(alert_id for alert_id, _ in alerts)

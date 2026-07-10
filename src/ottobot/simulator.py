@@ -150,7 +150,12 @@ class Simulator:
             replies.append(text)
 
         ctx = TaskContext(_reply=reply, config=self.bot.config)
-        result = await scheduled.handler(ctx)
+        try:
+            result = await scheduled.handler(ctx)
+        except Exception as exc:
+            # Match the runner, which logs a raising task and carries on —
+            # a broken task shouldn't take the whole REPL down with it.
+            return [f"task {name!r} raised {exc!r}"]
         if result is not None:
             replies.append(result)
         if not replies:
@@ -169,7 +174,7 @@ class Simulator:
             self.path_len = 255  # the device's encoding for "arrived direct"
             self.path = None
         else:
-            path = route.replace(",", "").strip()
+            path = "".join(route.replace(",", " ").split())
             if path:
                 try:
                     int(path, 16)
