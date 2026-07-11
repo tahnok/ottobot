@@ -8,7 +8,7 @@ import types
 
 import pytest
 
-from helpers import ReplyRecorder, channel_msg, dm
+from helpers import ReplyRecorder, addressed, channel_msg
 from ottobot import Context, MeshBot, Sink, sink
 from ottobot.registry import SinkRegistry, module_sinks
 from ottobot.sinks import load_sinks, register_module
@@ -90,7 +90,7 @@ class TestSinkDispatch:
             seen.append(ctx.message.text)
 
         bot.add_sink(Sink(handler=watch))
-        await bot.dispatch(dm("just chatting"), reply)
+        await bot.dispatch(channel_msg("just chatting"), reply)
         assert seen == ["just chatting"]
 
     async def test_sink_returned_string_is_sent_as_reply(
@@ -100,7 +100,7 @@ class TestSinkDispatch:
             return "hello"
 
         bot.add_sink(Sink(handler=greet))
-        await bot.dispatch(dm("hi"), reply)
+        await bot.dispatch(channel_msg("hi"), reply)
         assert reply.replies == ["hello"]
 
     async def test_sink_returning_none_sends_nothing(
@@ -110,7 +110,7 @@ class TestSinkDispatch:
             return None
 
         bot.add_sink(Sink(handler=quiet))
-        await bot.dispatch(dm("hi"), reply)
+        await bot.dispatch(channel_msg("hi"), reply)
         assert reply.replies == []
 
     async def test_raising_sink_does_not_stop_other_sinks_or_commands(
@@ -129,7 +129,7 @@ class TestSinkDispatch:
 
         bot.add_sink(Sink(handler=boom))
         bot.add_sink(Sink(handler=watcher))
-        await bot.dispatch(dm("!ping"), reply)
+        await bot.dispatch(addressed("!ping"), reply)
         assert reply.replies == ["still here", "pong"]
 
     async def test_all_registered_sinks_run(
@@ -143,7 +143,7 @@ class TestSinkDispatch:
 
         bot.add_sink(Sink(handler=one))
         bot.add_sink(Sink(handler=two))
-        await bot.dispatch(dm("hi"), reply)
+        await bot.dispatch(channel_msg("hi"), reply)
         assert set(reply.replies) == {"1", "2"}
 
     async def test_sink_context_has_no_command_name_and_full_text_args(
@@ -156,14 +156,15 @@ class TestSinkDispatch:
             captured["args"] = ctx.args
 
         bot.add_sink(Sink(handler=cap))
-        await bot.dispatch(dm("!ping extra"), reply)
+        await bot.dispatch(channel_msg("!ping extra"), reply)
         assert captured == {"command_name": None, "args": "!ping extra"}
 
-    async def test_sink_runs_in_channel_when_responses_disabled(
+    async def test_sink_runs_even_when_command_not_addressed(
         self, reply: ReplyRecorder
     ) -> None:
-        # Sinks observe every message, even on channels the bot won't answer.
-        bot = MeshBot(name="ottobot", respond_in_channels=False)
+        # Sinks observe every message, even ones the bot won't answer as a
+        # command because it wasn't addressed by name.
+        bot = MeshBot(name="ottobot")
         seen: list[str] = []
 
         async def watch(ctx: Context) -> None:

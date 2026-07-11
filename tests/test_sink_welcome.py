@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from helpers import ReplyRecorder, channel_msg, dm
+from helpers import ReplyRecorder, channel_msg
 from ottobot import IncomingMessage, MeshBot
 from ottobot.config import BotConfig
 from ottobot.sinks import register_module
@@ -49,12 +49,6 @@ async def test_different_names_each_welcomed(
     await bot.dispatch(chan("hi", "alice"), reply)
     await bot.dispatch(chan("hi", "bob"), reply)
     assert reply.replies == [WELCOME, WELCOME]
-
-
-async def test_dms_are_never_welcomed(tmp_path: Path, reply: ReplyRecorder) -> None:
-    bot = await make_welcome_bot(tmp_path / "seen.db")
-    await bot.dispatch(dm("hello"), reply)  # a brand-new DM sender
-    assert reply.replies == []
 
 
 async def test_channel_message_without_a_name_is_ignored(

@@ -67,8 +67,6 @@ async def setup(bot: MeshBot) -> None:
 
 @sink()
 async def welcome(ctx: Context) -> str | None:
-    if ctx.message.is_dm:  # only greet on channels, never in DMs
-        return None
     name = ctx.sender_name
     if not name:  # channel message with no recoverable name
         return None

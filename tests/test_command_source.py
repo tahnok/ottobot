@@ -1,6 +1,6 @@
 import pytest
 
-from helpers import ReplyRecorder, dm
+from helpers import ReplyRecorder, addressed
 from ottobot import MeshBot
 from ottobot.commands import register_module, source
 
@@ -13,7 +13,7 @@ def bot() -> MeshBot:
 
 
 async def test_source(bot: MeshBot, reply: ReplyRecorder) -> None:
-    await bot.dispatch(dm("!source"), reply)
+    await bot.dispatch(addressed("!source"), reply)
     assert reply.replies == [
         "my source code is available at "
         "https://github.com/tahnok/ottobot and contributions are welcome"

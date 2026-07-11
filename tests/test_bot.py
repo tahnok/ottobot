@@ -1,6 +1,6 @@
 import pytest
 
-from helpers import ReplyRecorder, channel_msg, dm
+from helpers import ReplyRecorder, addressed, channel_msg
 from ottobot import Command, Context, MeshBot
 
 
@@ -78,7 +78,7 @@ class TestDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        await bot.dispatch(dm("!ping"), reply)
+        await bot.dispatch(addressed("!ping"), reply)
         assert reply.replies == ["pong"]
 
     async def test_handler_can_reply_directly(
@@ -89,7 +89,7 @@ class TestDispatch:
             await ctx.reply("one")
             await ctx.reply("two")
 
-        await bot.dispatch(dm("!multi"), reply)
+        await bot.dispatch(addressed("!multi"), reply)
         assert reply.replies == ["one", "two"]
 
     async def test_args_are_passed_to_handler(
@@ -99,19 +99,19 @@ class TestDispatch:
         async def echo(ctx: Context) -> str:
             return ctx.args
 
-        await bot.dispatch(dm("!echo hello world"), reply)
+        await bot.dispatch(addressed("!echo hello world"), reply)
         assert reply.replies == ["hello world"]
 
     async def test_non_command_text_is_ignored(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:
-        await bot.dispatch(dm("just chatting"), reply)
+        await bot.dispatch(channel_msg("just chatting"), reply)
         assert reply.replies == []
 
     async def test_unknown_command_is_ignored(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:
-        await bot.dispatch(dm("!nosuchthing"), reply)
+        await bot.dispatch(addressed("!nosuchthing"), reply)
         assert reply.replies == []
 
     async def test_handler_returning_none_sends_nothing(
@@ -121,7 +121,7 @@ class TestDispatch:
         async def quiet(ctx: Context) -> None:
             return None
 
-        await bot.dispatch(dm("!quiet"), reply)
+        await bot.dispatch(addressed("!quiet"), reply)
         assert reply.replies == []
 
     async def test_handler_exception_is_caught_and_reported(
@@ -131,7 +131,7 @@ class TestDispatch:
         async def boom(ctx: Context) -> str:
             raise RuntimeError("kaboom")
 
-        await bot.dispatch(dm("!boom"), reply)
+        await bot.dispatch(addressed("!boom"), reply)
         assert reply.replies == ["Sorry, !boom hit an error."]
 
     async def test_channel_messages_handled_when_addressed(
@@ -143,18 +143,6 @@ class TestDispatch:
 
         await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
         assert reply.replies == ["pong"]
-
-    async def test_channel_messages_ignored_when_disabled(
-        self, reply: ReplyRecorder
-    ) -> None:
-        bot = MeshBot(name="ottobot", respond_in_channels=False)
-
-        @bot.command("ping")
-        async def ping(ctx: Context) -> str:
-            return "pong"
-
-        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
-        assert reply.replies == []
 
 
 def _named_bot() -> MeshBot:
@@ -196,16 +184,6 @@ class TestAddressing:
         bot = MeshBot(name="ottobot")
         assert bot.strip_address("!ping") == ("!ping", False)
 
-    async def test_dm_needs_no_name(self, reply: ReplyRecorder) -> None:
-        bot = _named_bot()
-        await bot.dispatch(dm("!ping"), reply)
-        assert reply.replies == ["pong"]
-
-    async def test_dm_tolerates_name(self, reply: ReplyRecorder) -> None:
-        bot = _named_bot()
-        await bot.dispatch(dm("ottobot !ping"), reply)
-        assert reply.replies == ["pong"]
-
     async def test_channel_requires_name(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
         await bot.dispatch(channel_msg("!ping"), reply)
@@ -228,7 +206,7 @@ class TestAddressing:
         await bot.dispatch(channel_msg("!status"), reply)
         assert reply.replies == ["ok"]
 
-    async def test_context_exposes_sender_and_dm_flag(
+    async def test_context_exposes_sender(
         self, bot: MeshBot, reply: ReplyRecorder
     ) -> None:
         seen: dict[str, object] = {}
@@ -236,10 +214,9 @@ class TestAddressing:
         @bot.command("who")
         async def who(ctx: Context) -> None:
             seen["sender"] = ctx.sender_name
-            seen["is_dm"] = ctx.is_dm
 
-        await bot.dispatch(dm("!who"), reply)
-        assert seen == {"sender": "alice", "is_dm": True}
+        await bot.dispatch(addressed("!who"), reply)
+        assert seen == {"sender": "alice"}
 
 
 class TestHelp:
@@ -250,7 +227,7 @@ class TestHelp:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        await bot.dispatch(dm("!help"), reply)
+        await bot.dispatch(addressed("!help"), reply)
         assert len(reply.replies) == 1
         text = reply.replies[0]
         assert "!help - List available commands" in text

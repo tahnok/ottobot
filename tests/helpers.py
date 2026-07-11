@@ -5,14 +5,13 @@ from typing import Any
 from ottobot.context import IncomingMessage
 
 
-def dm(text: str, **extra: Any) -> IncomingMessage:
-    return IncomingMessage(
-        text=text, sender_key="abcd1234", sender_name="alice", **extra
-    )
-
-
 def channel_msg(text: str, idx: int = 0, **extra: Any) -> IncomingMessage:
     return IncomingMessage(text=text, sender_name="alice", channel_idx=idx, **extra)
+
+
+def addressed(text: str, idx: int = 0, **extra: Any) -> IncomingMessage:
+    """A channel message that addresses the bot by name, so commands run."""
+    return channel_msg(f"@[ottobot] {text}", idx=idx, **extra)
 
 
 class ReplyRecorder:

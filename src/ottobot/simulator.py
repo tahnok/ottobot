@@ -2,12 +2,11 @@
 
     ottobot --simulate
 
-Type messages exactly as you would send them over the mesh ("!ping",
-"!roll 20", ...) and the bot's replies are printed back — nothing touches
-the network. Lines starting with "/" control the simulated sender instead
-of going to the bot:
+Type messages exactly as you would send them over the mesh ("@[ottobot]
+!ping", "@[ottobot] !roll 20", ...) and the bot's replies are printed back
+— nothing touches the network. Lines starting with "/" control the
+simulated sender instead of going to the bot:
 
-    /dm                 talk to the bot in a DM
     /channel [n]        talk on channel n (default 0, where you start)
     /name <name>        change the simulated sender's name
     /hops <n> [a1,b2]   pretend messages took n repeater hops, optionally
@@ -28,13 +27,11 @@ from .context import IncomingMessage, TaskContext
 
 BANNER = (
     "Simulator: messages are handled in memory, nothing is sent over the mesh.\n"
-    "On a channel, mention the bot (e.g. '@[{name}] !help'); in a DM "
-    "(/dm) the prefix alone is enough.\n"
+    "Mention the bot to address it, e.g. '@[{name}] !help'.\n"
     "/help for simulator controls, /quit to leave."
 )
 
 CONTROL_HELP = [
-    "/dm                 talk to the bot in a DM",
     "/channel [n]        talk on channel n (default 0, where you start)",
     "/name <name>        change the simulated sender's name",
     "/hops <n> [a1,b2]   pretend messages took n repeater hops",
@@ -43,39 +40,32 @@ CONTROL_HELP = [
     "/quit               leave the simulator",
 ]
 
-# The key prefix simulated DMs carry; commands only see it via
-# message.sender_key, there is no contact list to resolve it against.
-FAKE_SENDER_KEY = "f00dface0042"
-
 
 class Simulator:
     """Feeds typed lines into a MeshBot as if they arrived from the mesh.
 
-    Keeps a mutable "persona" (sender name, DM vs. channel, simulated
-    route) used to build each IncomingMessage. handle_line() is the
-    testable core: it takes one line of user input and returns the lines
-    to print. repl() wraps it in a stdin/stdout loop.
+    Keeps a mutable "persona" (sender name, channel, simulated route) used
+    to build each IncomingMessage. handle_line() is the testable core: it
+    takes one line of user input and returns the lines to print. repl()
+    wraps it in a stdin/stdout loop.
     """
 
     def __init__(self, bot: MeshBot) -> None:
         self.bot = bot
         self.sender_name = "you"
-        self.channel_idx: int | None = 0  # start on channel 0, like the mesh default
+        self.channel_idx = 0  # start on channel 0, like the mesh default
         self.path_len: int = 255  # arrived direct, like a nearby node
         self.path: str | None = None
         self.done = False
 
     @property
     def prompt(self) -> str:
-        where = "dm" if self.channel_idx is None else f"ch{self.channel_idx}"
-        return f"{self.sender_name}@{where}> "
+        return f"{self.sender_name}@ch{self.channel_idx}> "
 
     def build_message(self, text: str) -> IncomingMessage:
         """The IncomingMessage the current persona's *text* arrives as."""
         return IncomingMessage(
             text=text,
-            # Channel messages carry no sender key on the real mesh either.
-            sender_key=FAKE_SENDER_KEY if self.channel_idx is None else None,
             sender_name=self.sender_name,
             channel_idx=self.channel_idx,
             path_len=self.path_len,
@@ -108,9 +98,6 @@ class Simulator:
         name, _, args = body.partition(" ")
         args = args.strip()
         match name.lower():
-            case "dm":
-                self.channel_idx = None
-                return ["now talking in a DM"]
             case "channel" | "ch":
                 try:
                     self.channel_idx = int(args) if args else 0
@@ -180,15 +167,10 @@ class Simulator:
         return [f"messages now arrive {self.build_message('').path_description}"]
 
     def _status(self) -> str:
-        where = "a DM" if self.channel_idx is None else f"channel {self.channel_idx}"
         route = self.build_message("").path_description
-        addressing = (
-            "DM: prefix alone"
-            if self.channel_idx is None
-            else f"mention as @[{self.bot.name}]"
-        )
         return (
-            f"{self.sender_name} in {where}, messages arrive {route} " f"({addressing})"
+            f"{self.sender_name} on channel {self.channel_idx}, messages arrive "
+            f"{route} (mention as @[{self.bot.name}])"
         )
 
     async def repl(self) -> None:
