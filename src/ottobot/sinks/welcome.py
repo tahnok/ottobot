@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ottobot import Context, MeshBot, on_start, sink
+from ottobot.channels import PUBLIC
 
 # under 140 chars plz
 WELCOME = "Welcome to the mesh! Say '@ottobot !channels' or !help for more from me. See also https://ottawamesh.ca"
@@ -74,8 +75,7 @@ async def welcome(ctx: Context) -> str | None:
     if not ctx.config.database:
         return
 
-    idx = ctx.message.channel_idx
-    if idx != ctx.config.public_channel_idx():
+    if ctx.message.channel_idx != PUBLIC.index:
         return
     now = datetime.now(timezone.utc).isoformat()
     is_new = await asyncio.to_thread(_record, ctx.config.database, name, now)

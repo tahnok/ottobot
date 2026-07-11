@@ -50,14 +50,14 @@ together as the `ottobot` entry point.
   test messages via `tests/helpers.py`'s `dm()`/`channel_msg()`/
   `ReplyRecorder`). Try it interactively with `uv run ottobot --simulate`.
 - **Adding a scheduled task**: create `src/ottobot/tasks/<name>.py` with a
-  top-level `@task("name", interval=timedelta(...), channel="...",
+  top-level `@task("name", interval=timedelta(...), channel=OTT_ALERTS,
   help="...")` async handler taking `ctx: TaskContext` (no incoming
-  message — there isn't one) and returning `str | None`. The runner calls
-  it immediately on startup, then every `interval`; whatever it returns or
-  sends via `ctx.reply(...)` is broadcast on the named `channel`, whose
-  index is looked up in the configured channels (`src/ottobot/channels.py`,
-  the `CHANNELS` list — output is dropped with an error if the channel
-  isn't there). Try it interactively
+  message — there isn't one) and returning `str | None`. `channel` is one of
+  the channel constants from `src/ottobot/channels.py` (`PUBLIC`, `OTT_ALERTS`,
+  …), referenced directly rather than by name. The runner calls it
+  immediately on startup, then every `interval`; whatever it returns or
+  sends via `ctx.reply(...)` is broadcast on that `channel` (output is
+  dropped with an error if the bot hasn't joined it). Try it interactively
   with `uv run ottobot --simulate` and `/task <name>`. See
   `src/ottobot/tasks/weather_alerts.py` for an example.
 - **Module docstrings double as help text/usage** — e.g.

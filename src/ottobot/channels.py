@@ -30,11 +30,21 @@ class ChannelConfig:
     secret: bytes | None = None
 
 
-CHANNELS: tuple[ChannelConfig, ...] = (
-    ChannelConfig(0, "public"),
-    ChannelConfig(1, "#testing"),
-    ChannelConfig(2, "#ottobot-testing"),
-    # Joined so the weather_alerts task can broadcast here — you can't post to
-    # a channel the device hasn't joined.
-    ChannelConfig(3, "#ott-alerts"),
-)
+# Named so code can refer to a channel directly (e.g. ``@task(channel=OTT_ALERTS)``
+# or ``PUBLIC.index``) instead of by a bare string name or magic index.
+PUBLIC = ChannelConfig(0, "public")
+TESTING = ChannelConfig(1, "#testing")
+OTTOBOT_TESTING = ChannelConfig(2, "#ottobot-testing")
+# Joined so the weather_alerts task can broadcast here — you can't post to a
+# channel the device hasn't joined.
+OTT_ALERTS = ChannelConfig(3, "#ott-alerts")
+
+CHANNELS: tuple[ChannelConfig, ...] = (PUBLIC, TESTING, OTTOBOT_TESTING, OTT_ALERTS)
+
+
+def channel_for_index(index: int) -> ChannelConfig | None:
+    """The joined channel occupying device slot *index*, or None if unused."""
+    for channel in CHANNELS:
+        if channel.index == index:
+            return channel
+    return None

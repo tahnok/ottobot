@@ -26,6 +26,7 @@ from xml.etree import ElementTree
 import httpx
 
 from ottobot import TaskContext, task
+from ottobot.channels import OTT_ALERTS
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
 @task(
     "weather_alerts",
     interval=timedelta(minutes=10),
-    channel="#ott-alerts",
+    channel=OTT_ALERTS,
     help="Announce new Environment Canada weather alerts for Ottawa",
 )
 async def weather_alerts(ctx: TaskContext) -> None:

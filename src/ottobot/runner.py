@@ -17,6 +17,7 @@ from meshcore import EventType, MeshCore
 from meshcore.events import Event, Subscription
 
 from .bot import MeshBot
+from .channels import PUBLIC, ChannelConfig, channel_for_index
 from .config import BotConfig
 from .context import IncomingMessage, TaskContext
 from .registry import ScheduledTask
@@ -32,7 +33,7 @@ DEFAULT_MAX_CHANNELS = 8
 # secret-less channel, which is right for "#hashtag" channels but wrong for
 # "public" — a device keyed that way silently fails to decrypt all public
 # traffic. We substitute the real key here so a secret-less "public" works.
-PUBLIC_CHANNEL_NAME = "public"
+PUBLIC_CHANNEL_NAME = PUBLIC.name
 PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 
 # Path hash mode value for 2-byte-per-hop path hashes (0=1 byte, 1=2 bytes,
@@ -241,25 +242,24 @@ class MeshCoreRunner:
         if result is not None:
             await broadcast(result)
 
-    async def _broadcast(self, text: str, channel: str) -> None:
-        """Send *text* on the config channel named *channel*.
+    async def _broadcast(self, text: str, channel: ChannelConfig) -> None:
+        """Send *text* on *channel*.
 
-        Scheduled tasks have no inbound message to reply to, so their
-        output goes to their declared channel instead. A channel missing
-        from the config drops the message rather than guessing an index.
+        Scheduled tasks have no inbound message to reply to, so their output
+        goes to their declared channel instead. A channel the bot hasn't
+        joined drops the message rather than posting to an unconfigured slot.
         """
-        idx = self.bot.config.channel_idx(channel)
-        if idx is None:
+        if channel not in self.bot.config.channels:
             logger.error(
-                "channel %r is not in the config; dropping broadcast %r",
-                channel,
+                "channel %s is not joined; dropping broadcast %r",
+                channel.name,
                 text,
             )
             return
-        logger.info("broadcast to channel %d (%s): %r", idx, channel, text)
-        result = await self.mc.commands.send_chan_msg(idx, text)
+        logger.info("broadcast to %s (idx %d): %r", channel.name, channel.index, text)
+        result = await self.mc.commands.send_chan_msg(channel.index, text)
         if result.type == EventType.ERROR:
-            logger.error("failed to broadcast to channel %d: %r", idx, result.payload)
+            logger.error("failed to broadcast to %s: %r", channel.name, result.payload)
 
     async def run_forever(self) -> None:
         """Start the bot and block until cancelled."""
@@ -328,16 +328,19 @@ class MeshCoreRunner:
             raw=payload,
         )
 
+        channel = channel_for_index(channel_idx)
+        label = channel.name if channel else f"channel {channel_idx}"
+
         logger.info(
-            "channel %d msg from %s [%s]: %r",
-            channel_idx,
+            "%s msg from %s [%s]: %r",
+            label,
             sender_name,
             message.path_description,
             text,
         )
 
         async def reply(text: str) -> None:
-            logger.info("channel %d reply: %r", channel_idx, text)
+            logger.info("%s reply: %r", label, text)
             result = await self.mc.commands.send_chan_msg(channel_idx, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)

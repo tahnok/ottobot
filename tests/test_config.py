@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from ottobot.channels import CHANNELS
-from ottobot.config import BotConfig, ChannelConfig, load_config, parse_config
+from ottobot.config import BotConfig, load_config, parse_config
 
 
 def parse(text: str) -> BotConfig:
@@ -100,39 +100,6 @@ def test_discord_webhook_url_is_parsed() -> None:
 
 def test_discord_webhook_url_defaults_to_none() -> None:
     assert parse('name = "bot"').discord_webhook_url is None
-
-
-def test_channel_idx_finds_named_channel() -> None:
-    config = BotConfig(
-        channels=(
-            ChannelConfig(index=0, name="public"),
-            ChannelConfig(index=2, name="#ott-alerts"),
-        )
-    )
-    assert config.channel_idx("#ott-alerts") == 2
-
-
-def test_channel_idx_is_case_insensitive() -> None:
-    config = BotConfig(channels=(ChannelConfig(index=1, name="#Ott-Alerts"),))
-    assert config.channel_idx("#ott-alerts") == 1
-
-
-def test_channel_idx_returns_none_when_channel_missing() -> None:
-    assert BotConfig(channels=()).channel_idx("#ott-alerts") is None
-
-
-def test_public_channel_idx_defaults_to_zero() -> None:
-    assert BotConfig(channels=()).public_channel_idx() == 0
-
-
-def test_public_channel_idx_finds_named_channel() -> None:
-    config = BotConfig(channels=(ChannelConfig(index=2, name="public"),))
-    assert config.public_channel_idx() == 2
-
-
-def test_public_channel_idx_is_case_insensitive() -> None:
-    config = BotConfig(channels=(ChannelConfig(index=3, name="Public"),))
-    assert config.public_channel_idx() == 3
 
 
 def test_load_config_reads_file(tmp_path) -> None:

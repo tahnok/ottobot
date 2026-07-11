@@ -7,6 +7,7 @@ from meshcore import EventType
 from meshcore.events import Event
 
 from ottobot import Context, MeshBot, TaskContext
+from ottobot.channels import PUBLIC
 from ottobot.config import BotConfig, ChannelConfig, RadioConfig
 from ottobot.runner import (
     PUBLIC_CHANNEL_KEY,
@@ -358,8 +359,10 @@ class TestChannelMessages:
         with caplog.at_level("INFO", logger="ottobot.runner"):
             await mc.deliver_chan("alice: just chatting", channel_idx=2)
         assert mc.commands.sent_chan_msgs == []
+        # Channel 2 is #ottobot-testing; the log names it rather than the index.
         assert any(
-            "channel 2 msg from alice" in r.message and "just chatting" in r.message
+            "#ottobot-testing msg from alice" in r.message
+            and "just chatting" in r.message
             for r in caplog.records
         )
 
@@ -487,9 +490,10 @@ class TestScheduledTasks:
     async def test_task_runs_on_start_and_broadcasts_return_value(
         self, mc: FakeMeshCore
     ) -> None:
-        bot = task_bot(ChannelConfig(index=0, name="#news"))
+        news = ChannelConfig(index=0, name="#news")
+        bot = task_bot(news)
 
-        @bot.task("greet", interval=timedelta(hours=1), channel="#news")
+        @bot.task("greet", interval=timedelta(hours=1), channel=news)
         async def greet(ctx: TaskContext) -> str:
             return "hello mesh"
 
@@ -500,9 +504,10 @@ class TestScheduledTasks:
         assert mc.commands.sent_chan_msgs == [(0, "hello mesh")]
 
     async def test_task_reply_is_also_broadcast(self, mc: FakeMeshCore) -> None:
-        bot = task_bot(ChannelConfig(index=0, name="#news"))
+        news = ChannelConfig(index=0, name="#news")
+        bot = task_bot(news)
 
-        @bot.task("greet", interval=timedelta(hours=1), channel="#news")
+        @bot.task("greet", interval=timedelta(hours=1), channel=news)
         async def greet(ctx: TaskContext) -> None:
             await ctx.reply("first")
             await ctx.reply("second")
@@ -516,12 +521,10 @@ class TestScheduledTasks:
     async def test_task_broadcasts_on_its_declared_channel(
         self, mc: FakeMeshCore
     ) -> None:
-        bot = task_bot(
-            ChannelConfig(index=0, name="public"),
-            ChannelConfig(index=2, name="#ott-alerts"),
-        )
+        alerts = ChannelConfig(index=2, name="#ott-alerts")
+        bot = task_bot(ChannelConfig(index=0, name="public"), alerts)
 
-        @bot.task("greet", interval=timedelta(hours=1), channel="#ott-alerts")
+        @bot.task("greet", interval=timedelta(hours=1), channel=alerts)
         async def greet(ctx: TaskContext) -> str:
             return "hi"
 
@@ -531,14 +534,15 @@ class TestScheduledTasks:
         await runner.stop()
         assert mc.commands.sent_chan_msgs == [(2, "hi")]
 
-    async def test_task_channel_missing_from_config_drops_output(
+    async def test_task_channel_not_joined_drops_output(
         self,
         mc: FakeMeshCore,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         bot = task_bot(ChannelConfig(index=0, name="public"))
+        nowhere = ChannelConfig(index=5, name="#nowhere")
 
-        @bot.task("greet", interval=timedelta(hours=1), channel="#nowhere")
+        @bot.task("greet", interval=timedelta(hours=1), channel=nowhere)
         async def greet(ctx: TaskContext) -> str:
             return "hi"
 
@@ -548,16 +552,14 @@ class TestScheduledTasks:
             await asyncio.sleep(0.05)
         await runner.stop()
         assert mc.commands.sent_chan_msgs == []
-        assert any(
-            "'#nowhere' is not in the config" in r.message for r in caplog.records
-        )
+        assert any("#nowhere is not joined" in r.message for r in caplog.records)
 
     async def test_task_sees_the_bot_config(self, mc: FakeMeshCore) -> None:
         config = BotConfig(discord_webhook_url="https://example.com/webhook")
         bot = MeshBot(name="ottobot", config=config)
         seen: list[str | None] = []
 
-        @bot.task("watch", interval=timedelta(hours=1), channel="public")
+        @bot.task("watch", interval=timedelta(hours=1), channel=PUBLIC)
         async def watch(ctx: TaskContext) -> None:
             seen.append(ctx.config.discord_webhook_url)
 
@@ -572,13 +574,14 @@ class TestScheduledTasks:
         mc: FakeMeshCore,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        bot = task_bot(ChannelConfig(index=0, name="public"))
+        public = ChannelConfig(index=0, name="public")
+        bot = task_bot(public)
 
-        @bot.task("boom", interval=timedelta(hours=1), channel="public")
+        @bot.task("boom", interval=timedelta(hours=1), channel=public)
         async def boom(ctx: TaskContext) -> None:
             raise RuntimeError("kaboom")
 
-        @bot.task("ok", interval=timedelta(hours=1), channel="public")
+        @bot.task("ok", interval=timedelta(hours=1), channel=public)
         async def ok(ctx: TaskContext) -> str:
             return "fine"
 
@@ -595,7 +598,7 @@ class TestScheduledTasks:
     ) -> None:
         calls = 0
 
-        @bot.task("counter", interval=timedelta(seconds=0), channel="public")
+        @bot.task("counter", interval=timedelta(seconds=0), channel=PUBLIC)
         async def counter(ctx: TaskContext) -> None:
             nonlocal calls
             calls += 1
