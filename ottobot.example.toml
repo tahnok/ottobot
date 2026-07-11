@@ -26,15 +26,9 @@ database = "/data/ottobot.db"
 
 # The set of channels the bot tunes to is not configured here — it lives in
 # code (src/ottobot/channels.py, the CHANNELS list) so every Ottawa bot shares
-# it and commands/tasks can refer to it directly.
-
-# Radio parameters. Omit the whole section to leave the radio alone. These
-# values are how you pin a "region" — set them to your local mesh's preset.
-[radio]
-freq = 910.525
-bw = 62.5
-sf = 7
-cr = 5
+# it and commands/tasks can refer to it directly. The radio parameters that pin
+# the "region" (frequency, bandwidth, SF, CR) are likewise hardcoded in
+# src/ottobot/radio.py (the RADIO constant), not configured here.
 
 # Discord webhook sink. When webhook_url is set, every message seen on the
 # public channel is mirrored to that Discord webhook. Omit to disable.

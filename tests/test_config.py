@@ -15,22 +15,9 @@ def test_full_config_round_trips() -> None:
     config = parse("""
         name = "ottobot"
         private_key = "%s"
-
-        [radio]
-        freq = 910.525
-        bw = 250.0
-        sf = 11
-        cr = 5
         """ % ("ab" * 64))
     assert config.name == "ottobot"
     assert config.private_key == bytes.fromhex("ab" * 64)
-    assert config.radio is not None
-    assert (config.radio.freq, config.radio.bw, config.radio.sf, config.radio.cr) == (
-        910.525,
-        250.0,
-        11,
-        5,
-    )
 
 
 def test_empty_config_defaults_to_none() -> None:
@@ -40,14 +27,12 @@ def test_empty_config_defaults_to_none() -> None:
     assert config.private_key is None
     # Channels aren't config; they default to the shared code-defined set.
     assert config.channels == CHANNELS
-    assert config.radio is None
 
 
 def test_name_only() -> None:
     config = parse('name = "bot"')
     assert config.name == "bot"
     assert config.channels == CHANNELS
-    assert config.radio is None
 
 
 def test_database_parses_to_a_path() -> None:
@@ -67,14 +52,6 @@ def test_bad_private_key_hex() -> None:
 def test_private_key_wrong_length() -> None:
     with pytest.raises(ValueError, match="private_key must be 64 bytes"):
         parse('private_key = "abcd"')
-
-
-def test_radio_missing_keys() -> None:
-    with pytest.raises(ValueError, match="missing required keys"):
-        parse("""
-            [radio]
-            freq = 910.525
-            """)
 
 
 def test_log_level_defaults_to_none() -> None:

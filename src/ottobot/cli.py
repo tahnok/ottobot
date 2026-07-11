@@ -7,8 +7,9 @@
 Then message the node "!help" (in a DM or on channel 0) to see commands.
 
 Pass --config ottobot.toml to make a TOML file the source of truth for the
-bot's name, key pair, and radio params; those settings are pushed onto the
-device on startup. See ottobot.example.toml for the format.
+bot's name and key pair; those settings are pushed onto the device on startup.
+See ottobot.example.toml for the format. (The channels and radio preset are
+hardcoded in code, not config — see ottobot.channels / ottobot.radio.)
 
 To try commands locally without a device or touching the mesh:
 

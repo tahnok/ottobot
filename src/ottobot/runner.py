@@ -19,6 +19,7 @@ from meshcore.events import Event, Subscription
 from .bot import MeshBot
 from .channels import PUBLIC, ChannelConfig, channel_for_index
 from .config import BotConfig
+from .radio import RADIO
 from .context import IncomingMessage, TaskContext
 from .registry import ScheduledTask
 
@@ -113,11 +114,13 @@ async def _apply(description: str, result: Event) -> None:
 
 
 async def apply_settings(mc: MeshCoreLike, config: BotConfig) -> None:
-    """Push the config's name, channels, key pair, and radio onto the device.
+    """Push the config's name and key pair, plus the shared channels and radio,
+    onto the device.
 
-    Each field is optional; anything left unset in the config is skipped so
-    the device keeps its current value. The path hash mode is fixed to
-    2-byte hops regardless of config.
+    The config fields (name, private key) are optional; anything left unset is
+    skipped so the device keeps its current value. The channels, radio preset,
+    and path hash mode are hardcoded (see ``ottobot.channels`` /
+    ``ottobot.radio``) and always applied so every Ottawa bot matches.
     """
     await _apply(
         "path hash mode=2-byte",
@@ -137,12 +140,10 @@ async def apply_settings(mc: MeshCoreLike, config: BotConfig) -> None:
             f"channel {channel.index} name={channel.name!r}",
             await mc.commands.set_channel(channel.index, channel.name, secret),
         )
-    if config.radio is not None:
-        r = config.radio
-        await _apply(
-            f"radio freq={r.freq} bw={r.bw} sf={r.sf} cr={r.cr}",
-            await mc.commands.set_radio(r.freq, r.bw, r.sf, r.cr),
-        )
+    await _apply(
+        f"radio freq={RADIO.freq} bw={RADIO.bw} sf={RADIO.sf} cr={RADIO.cr}",
+        await mc.commands.set_radio(RADIO.freq, RADIO.bw, RADIO.sf, RADIO.cr),
+    )
 
 
 async def connect(

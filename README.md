@@ -47,11 +47,13 @@ commands meant to react to any channel message.
 ## Config file
 
 A TOML config file can act as the source of truth for the device's
-**name**, **channels**, **key pair**, and **radio params**. On startup the
-bot connects, then pushes whatever the file specifies onto the radio, so the
-device always matches the file — handy for reproducing a node after a
-re-flash or device swap. Connection flags (`--serial`/`--ble`/`--tcp`) stay
-on the command line.
+**name** and **key pair**. On startup the bot connects, then pushes whatever
+the file specifies onto the radio, so the device always matches the file —
+handy for reproducing a node after a re-flash or device swap. (The
+**channels** and **radio params** are the same for every Ottawa bot, so they
+are hardcoded in code — `src/ottobot/channels.py` and `src/ottobot/radio.py`
+— rather than configured here.) Connection flags
+(`--serial`/`--ble`/`--tcp`) stay on the command line.
 
 ```bash
 uv run ottobot --serial /dev/ttyUSB0 --config ottobot.toml

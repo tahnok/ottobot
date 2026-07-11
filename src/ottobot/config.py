@@ -1,21 +1,16 @@
 """Load Ottobot's TOML config: the source of truth for per-bot settings.
 
-The config file pins the bot's advertised name, key pair, and (optionally)
-radio parameters. On startup these are pushed onto the radio so the device
-always matches the file — see ``runner.apply_settings``. The set of channels
-is not per-bot config; it lives in ``ottobot.channels`` (see ``CHANNELS``).
+The config file pins the bot's advertised name and key pair. On startup these
+are pushed onto the device so it always matches the file — see
+``runner.apply_settings``. The channels and radio preset are not per-bot config;
+they live in ``ottobot.channels`` (see ``CHANNELS``) and ``ottobot.radio`` (see
+``RADIO``) so every Ottawa bot shares them.
 
 This module only parses and validates; it imports nothing from meshcore so
 it stays easy to unit-test. Example file:
 
     name = "ottobot"
     private_key = "<128 hex chars>"   # optional, 64-byte key pair
-
-    [radio]
-    freq = 910.525
-    bw = 250.0
-    sf = 11
-    cr = 5
 
     log_level = "INFO"                  # optional; DEBUG/INFO/WARNING/...
 
@@ -36,19 +31,10 @@ PRIVATE_KEY_LEN = 64
 
 
 @dataclass(frozen=True)
-class RadioConfig:
-    freq: float
-    bw: float
-    sf: int
-    cr: int
-
-
-@dataclass(frozen=True)
 class BotConfig:
     name: str | None = None
     private_key: bytes | None = None
     channels: tuple[ChannelConfig, ...] = CHANNELS
-    radio: RadioConfig | None = None
     # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
     log_level: str | None = None
 
@@ -74,18 +60,6 @@ def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
     return raw
 
 
-def _parse_radio(raw: dict) -> RadioConfig:
-    missing = [k for k in ("freq", "bw", "sf", "cr") if k not in raw]
-    if missing:
-        raise ValueError(f"[radio] is missing required keys: {', '.join(missing)}")
-    return RadioConfig(
-        freq=float(raw["freq"]),
-        bw=float(raw["bw"]),
-        sf=int(raw["sf"]),
-        cr=int(raw["cr"]),
-    )
-
-
 def _parse_log_level(value: object) -> str:
     name = str(value).upper()
     if name not in logging.getLevelNamesMapping():
@@ -102,7 +76,6 @@ def parse_config(data: dict) -> BotConfig:
         if private_key_hex is not None
         else None
     )
-    radio = _parse_radio(data["radio"]) if "radio" in data else None
     name = data.get("name")
     log_level_raw = data.get("log_level")
     log_level = _parse_log_level(log_level_raw) if log_level_raw is not None else None
@@ -114,7 +87,6 @@ def parse_config(data: dict) -> BotConfig:
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
-        radio=radio,
         log_level=log_level,
         discord_webhook_url=discord_webhook_url,
         database=Path(database) if database is not None else None,
