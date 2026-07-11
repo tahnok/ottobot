@@ -8,7 +8,8 @@ from meshcore.events import Event
 
 from ottobot import Context, MeshBot, TaskContext
 from ottobot.channels import PUBLIC, ChannelConfig
-from ottobot.config import BotConfig, RadioConfig
+from ottobot.config import BotConfig
+from ottobot.radio import RADIO
 from ottobot.runner import (
     PUBLIC_CHANNEL_KEY,
     MeshCoreRunner,
@@ -424,7 +425,6 @@ class TestApplySettings:
                 ChannelConfig(0, "public"),
                 ChannelConfig(1, "private", b"\x02" * 16),
             ),
-            radio=RadioConfig(freq=910.525, bw=250.0, sf=11, cr=5),
         )
         await apply_settings(mc, config)
         assert mc.commands.names == ["ottobot"]
@@ -434,7 +434,8 @@ class TestApplySettings:
             (0, "public", PUBLIC_CHANNEL_KEY),
             (1, "private", b"\x02" * 16),
         ]
-        assert mc.commands.radios == [(910.525, 250.0, 11, 5)]
+        # The radio preset is hardcoded (ottobot.radio.RADIO), not from config.
+        assert mc.commands.radios == [(RADIO.freq, RADIO.bw, RADIO.sf, RADIO.cr)]
         assert mc.commands.path_hash_modes == [1]
 
     async def test_public_channel_gets_canonical_key_when_secret_omitted(
@@ -462,22 +463,22 @@ class TestApplySettings:
         await apply_settings(mc, config)
         assert mc.commands.channels == [(0, "#testing", None)]
 
-    async def test_skips_absent_fields(self, mc: FakeMeshCore) -> None:
+    async def test_skips_absent_config_fields(self, mc: FakeMeshCore) -> None:
         await apply_settings(mc, BotConfig(name="ottobot", channels=()))
         assert mc.commands.names == ["ottobot"]
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []
-        assert mc.commands.radios == []
 
-    async def test_empty_config_applies_nothing_but_path_hash_mode(
+    async def test_empty_config_still_applies_hardcoded_settings(
         self, mc: FakeMeshCore
     ) -> None:
         await apply_settings(mc, BotConfig(channels=()))
+        # The config-driven fields (name, private key) are skipped when unset.
         assert mc.commands.names == []
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []
-        assert mc.commands.radios == []
-        # Path hash mode is always applied, unlike the config-driven fields.
+        # The radio preset and path hash mode are hardcoded and always applied.
+        assert mc.commands.radios == [(RADIO.freq, RADIO.bw, RADIO.sf, RADIO.cr)]
         assert mc.commands.path_hash_modes == [1]
 
 
