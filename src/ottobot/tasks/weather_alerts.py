@@ -6,7 +6,7 @@ minutes the feed is fetched and any alert not seen on a previous fetch is
 announced. The very first fetch only records what's already active — it
 doesn't announce ongoing alerts the bot just happened to start during — so
 only newly issued alerts are ever announced. Alerts go out on the
-"#ott-alerts" channel, which must be in the config's [[channels]].
+"#ott-alerts" channel, one of the configured channels (ottobot.channels).
 
 The feed represents "no alerts" as a real <entry> ("No alerts in effect,
 ..."), so the bot announces an all-clear once when the last alert ends.

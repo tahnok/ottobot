@@ -24,19 +24,9 @@ database = "/data/ottobot.db"
 # current one from a device if you want to reuse it.
 # private_key = "0123...cdef"
 
-# Channels to configure, repeat the [[channels]] block per channel.
-[[channels]]
-index = 0
-name = "public"
-# 16-byte secret as 32 hex chars. Omit to let the device derive it from the
-# channel name (the MeshCore default for "#"-prefixed names).
-# secret = "0123456789abcdef0123456789abcdef"
-
-# Scheduled tasks broadcast on the channel they declare, looked up here by
-# name. The built-in weather_alerts task posts to "#ott-alerts".
-[[channels]]
-index = 1
-name = "#ott-alerts"
+# The set of channels the bot tunes to is not configured here — it lives in
+# code (src/ottobot/channels.py, the CHANNELS list) so every Ottawa bot shares
+# it and commands/tasks can refer to it directly.
 
 # Radio parameters. Omit the whole section to leave the radio alone. These
 # values are how you pin a "region" — set them to your local mesh's preset.

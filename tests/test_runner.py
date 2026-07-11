@@ -460,7 +460,7 @@ class TestApplySettings:
         assert mc.commands.channels == [(0, "#testing", None)]
 
     async def test_skips_absent_fields(self, mc: FakeMeshCore) -> None:
-        await apply_settings(mc, BotConfig(name="ottobot"))
+        await apply_settings(mc, BotConfig(name="ottobot", channels=()))
         assert mc.commands.names == ["ottobot"]
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []
@@ -469,7 +469,7 @@ class TestApplySettings:
     async def test_empty_config_applies_nothing_but_path_hash_mode(
         self, mc: FakeMeshCore
     ) -> None:
-        await apply_settings(mc, BotConfig())
+        await apply_settings(mc, BotConfig(channels=()))
         assert mc.commands.names == []
         assert mc.commands.private_keys == []
         assert mc.commands.channels == []

@@ -51,8 +51,8 @@ class Sink:
 class ScheduledTask:
     """A named handler that's run on a timer instead of in response to a message.
 
-    channel names the config channel the task's output is sent on; the
-    runner looks its index up in the config's [[channels]] entries.
+    channel names the channel the task's output is sent on; the runner looks
+    its index up in the configured channels (ottobot.channels.CHANNELS).
     """
 
     name: str

@@ -55,8 +55,9 @@ together as the `ottobot` entry point.
   message — there isn't one) and returning `str | None`. The runner calls
   it immediately on startup, then every `interval`; whatever it returns or
   sends via `ctx.reply(...)` is broadcast on the named `channel`, whose
-  index is looked up in the config's `[[channels]]` (output is dropped
-  with an error if the channel isn't configured). Try it interactively
+  index is looked up in the configured channels (`src/ottobot/channels.py`,
+  the `CHANNELS` list — output is dropped with an error if the channel
+  isn't there). Try it interactively
   with `uv run ottobot --simulate` and `/task <name>`. See
   `src/ottobot/tasks/weather_alerts.py` for an example.
 - **Module docstrings double as help text/usage** — e.g.
