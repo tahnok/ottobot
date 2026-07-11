@@ -1,26 +1,27 @@
-"""Greets newcomers to a channel.
+"""Greets newcomers
 
 Watches public (channel) messages and the first time it sees a given
 sender name, it replies with a short welcome pointing at !help. Seen names
 are stored in a sqlite file so the bot doesn't re-greet people across
 restarts; each row also tracks when the name was first seen and last heard
 from.
-
-Senders are tracked by name only — channel messages carry no public key,
-and DMs are skipped entirely. The name is spoofable, so this is a
-courtesy, not anything to rely on.
 """
 
 from __future__ import annotations
 
 import asyncio
 import sqlite3
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ottobot import Context, MeshBot, on_start, sink
 
-WELCOME = "Welcome to the Ottawa mesh! Send !help to see what I can do."
+#under 140 chars plz
+WELCOME = "Welcome to the mesh! Say '@ottobot !channels' or !help for more from me. See also https://ottawamesh.ca"
+
+
+logger = logging.getLogger(__name__)
 
 
 def _init_db(db_path: Path) -> None:
@@ -72,6 +73,12 @@ async def welcome(ctx: Context) -> str | None:
         return None
     if not ctx.config.database:
         return
+
+    idx = ctx.message.channel_idx
+    if idx != ctx.config.public_channel_idx():
+        return
     now = datetime.now(timezone.utc).isoformat()
     is_new = await asyncio.to_thread(_record, ctx.config.database, name, now)
-    return WELCOME if is_new else None
+
+    if is_new:
+        return WELCOME
