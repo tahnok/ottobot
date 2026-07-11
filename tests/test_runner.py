@@ -7,8 +7,8 @@ from meshcore import EventType
 from meshcore.events import Event
 
 from ottobot import Context, MeshBot, TaskContext
-from ottobot.channels import PUBLIC
-from ottobot.config import BotConfig, ChannelConfig, RadioConfig
+from ottobot.channels import PUBLIC, ChannelConfig
+from ottobot.config import BotConfig, RadioConfig
 from ottobot.runner import (
     PUBLIC_CHANNEL_KEY,
     MeshCoreRunner,

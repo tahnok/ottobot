@@ -32,9 +32,6 @@ from pathlib import Path
 
 from ottobot.channels import CHANNELS, ChannelConfig
 
-# Re-exported so existing importers can keep using ``config.ChannelConfig``.
-__all__ = ["BotConfig", "ChannelConfig", "RadioConfig", "load_config", "parse_config"]
-
 PRIVATE_KEY_LEN = 64
 
 
