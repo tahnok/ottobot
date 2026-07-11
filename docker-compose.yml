@@ -22,7 +22,6 @@ services:
     command: ["--serial", "/dev/ttyUSB0", "--config", "/app/ottobot.toml"]
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
-
     # The container runs as a non-root user, so it needs to belong to the
     # group that owns the serial device on the host (usually `dialout`, GID
     # 20 on Debian/Ubuntu). Run `stat -c '%G %g' /dev/ttyUSB0` on the host to
@@ -64,6 +63,7 @@ services:
     volumes:
       # Read-only: the bot only reads the config, and it holds the private key.
       - "./ottobot.toml:/app/ottobot.toml:ro"
+      - "./data:/data"
 
     # --- Hardening -----------------------------------------------------------
     # Don't run as root
