@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ottobot import Context, MeshBot, on_start, sink
 
-#under 140 chars plz
+# under 140 chars plz
 WELCOME = "Welcome to the mesh! Say '@ottobot !channels' or !help for more from me. See also https://ottawamesh.ca"
 
 
