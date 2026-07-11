@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .bot import MeshBot
+    from .channels import ChannelConfig
     from .context import Context, TaskContext
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
@@ -51,14 +52,14 @@ class Sink:
 class ScheduledTask:
     """A named handler that's run on a timer instead of in response to a message.
 
-    channel names the config channel the task's output is sent on; the
-    runner looks its index up in the config's [[channels]] entries.
+    channel is the channel the task's output is broadcast on, referenced
+    directly as one of the ``ottobot.channels`` constants (e.g. ``OTT_ALERTS``).
     """
 
     name: str
     handler: TaskHandler
     interval: timedelta
-    channel: str
+    channel: "ChannelConfig"
     help: str = ""
 
 
@@ -124,7 +125,7 @@ def sink() -> Callable[[CommandHandler], CommandHandler]:
 
 
 def task(
-    name: str, *, interval: timedelta, channel: str, help: str = ""
+    name: str, *, interval: timedelta, channel: "ChannelConfig", help: str = ""
 ) -> Callable[[TaskHandler], TaskHandler]:
     """Mark a module-level coroutine as a scheduled task handler.
 
@@ -132,8 +133,8 @@ def task(
     needed at import time. The task modules under ottobot.tasks use
     this; load_tasks() later collects the marked handlers via
     module_tasks() and registers them on the bot. interval is how often
-    the runner calls the handler; channel is the name of the config
-    channel the task's output is sent on.
+    the runner calls the handler; channel is the ottobot.channels constant
+    the task's output is broadcast on.
     """
 
     def decorator(handler: TaskHandler) -> TaskHandler:

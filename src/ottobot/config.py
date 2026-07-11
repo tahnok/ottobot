@@ -1,23 +1,15 @@
-"""Load Ottobot's TOML config: the source of truth for device settings.
+"""Load Ottobot's TOML config: the source of truth for per-bot settings.
 
-The config file pins the bot's advertised name, channels, key pair, and
-(optionally) radio parameters. On startup these are pushed onto the radio so
-the device always matches the file — see ``runner.apply_settings``.
+The config file pins the bot's advertised name, key pair, and (optionally)
+radio parameters. On startup these are pushed onto the radio so the device
+always matches the file — see ``runner.apply_settings``. The set of channels
+is not per-bot config; it lives in ``ottobot.channels`` (see ``CHANNELS``).
 
 This module only parses and validates; it imports nothing from meshcore so
 it stays easy to unit-test. Example file:
 
     name = "ottobot"
     private_key = "<128 hex chars>"   # optional, 64-byte key pair
-
-    [[channels]]
-    index = 0
-    name = "public"
-    # secret = "<32 hex chars>"       # optional 16-byte secret
-
-    [[channels]]
-    index = 1
-    name = "#ott-alerts"              # weather_alerts posts here
 
     [radio]
     freq = 910.525
@@ -38,16 +30,9 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from ottobot.channels import CHANNELS, ChannelConfig
+
 PRIVATE_KEY_LEN = 64
-CHANNEL_SECRET_LEN = 16
-
-
-@dataclass(frozen=True)
-class ChannelConfig:
-    index: int
-    name: str
-    # 16-byte secret; None means the device derives it from the name.
-    secret: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -62,7 +47,7 @@ class RadioConfig:
 class BotConfig:
     name: str | None = None
     private_key: bytes | None = None
-    channels: tuple[ChannelConfig, ...] = ()
+    channels: tuple[ChannelConfig, ...] = CHANNELS
     radio: RadioConfig | None = None
     # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
     log_level: str | None = None
@@ -74,18 +59,6 @@ class BotConfig:
     # Discord incoming-webhook URL; when set, the discord sink mirrors
     # public-channel messages to it. None disables the sink.
     discord_webhook_url: str | None = None
-
-    def channel_idx(self, name: str) -> int | None:
-        """Index of the channel with this name (case-insensitive), or None."""
-        for channel in self.channels:
-            if channel.name.lower() == name.lower():
-                return channel.index
-        return None
-
-    def public_channel_idx(self) -> int:
-        """Index of the channel named "public" in this config, or 0 by default."""
-        idx = self.channel_idx("public")
-        return 0 if idx is None else idx
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -99,18 +72,6 @@ def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
             f"({expected_len * 2} hex chars), got {len(raw)}"
         )
     return raw
-
-
-def _parse_channel(raw: dict) -> ChannelConfig:
-    if "index" not in raw or "name" not in raw:
-        raise ValueError("each [[channels]] entry needs an index and a name")
-    secret_hex = raw.get("secret")
-    secret = (
-        _decode_hex(secret_hex, "channel secret", CHANNEL_SECRET_LEN)
-        if secret_hex is not None
-        else None
-    )
-    return ChannelConfig(index=int(raw["index"]), name=str(raw["name"]), secret=secret)
 
 
 def _parse_radio(raw: dict) -> RadioConfig:
@@ -141,7 +102,6 @@ def parse_config(data: dict) -> BotConfig:
         if private_key_hex is not None
         else None
     )
-    channels = tuple(_parse_channel(c) for c in data.get("channels", ()))
     radio = _parse_radio(data["radio"]) if "radio" in data else None
     name = data.get("name")
     log_level_raw = data.get("log_level")
@@ -154,7 +114,6 @@ def parse_config(data: dict) -> BotConfig:
     return BotConfig(
         name=str(name) if name is not None else None,
         private_key=private_key,
-        channels=channels,
         radio=radio,
         log_level=log_level,
         discord_webhook_url=discord_webhook_url,

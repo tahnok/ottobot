@@ -6,7 +6,7 @@ minutes the feed is fetched and any alert not seen on a previous fetch is
 announced. The very first fetch only records what's already active — it
 doesn't announce ongoing alerts the bot just happened to start during — so
 only newly issued alerts are ever announced. Alerts go out on the
-"#ott-alerts" channel, which must be in the config's [[channels]].
+"#ott-alerts" channel, one of the configured channels (ottobot.channels).
 
 The feed represents "no alerts" as a real <entry> ("No alerts in effect,
 ..."), so the bot announces an all-clear once when the last alert ends.
@@ -26,6 +26,7 @@ from xml.etree import ElementTree
 import httpx
 
 from ottobot import TaskContext, task
+from ottobot.channels import OTT_ALERTS
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
 @task(
     "weather_alerts",
     interval=timedelta(minutes=10),
-    channel="#ott-alerts",
+    channel=OTT_ALERTS,
     help="Announce new Environment Canada weather alerts for Ottawa",
 )
 async def weather_alerts(ctx: TaskContext) -> None:

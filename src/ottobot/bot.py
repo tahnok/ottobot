@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
+from .channels import ChannelConfig
 from .config import BotConfig
 from .registry import (
     Command,
@@ -93,7 +94,7 @@ class MeshBot:
         return decorator
 
     def task(
-        self, name: str, *, interval: timedelta, channel: str, help: str = ""
+        self, name: str, *, interval: timedelta, channel: ChannelConfig, help: str = ""
     ) -> Callable[[TaskHandler], TaskHandler]:
         """Decorator that registers a scheduled task handler."""
 

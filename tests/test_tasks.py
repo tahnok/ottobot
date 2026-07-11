@@ -11,6 +11,7 @@ from datetime import timedelta
 import pytest
 
 from ottobot import MeshBot, ScheduledTask, task, TaskContext
+from ottobot.channels import OTT_ALERTS, PUBLIC
 from ottobot.cli import build_bot
 from ottobot.registry import TaskRegistry, module_tasks
 from ottobot.tasks import iter_module_names, load_tasks, register_module
@@ -20,14 +21,14 @@ class TestTaskMarker:
     def test_decorator_returns_handler_unchanged(self) -> None:
         async def handler(ctx: TaskContext) -> None: ...
 
-        decorator = task("noop", interval=timedelta(minutes=1), channel="public")
+        decorator = task("noop", interval=timedelta(minutes=1), channel=PUBLIC)
         assert decorator(handler) is handler
 
     def test_decorator_attaches_task_metadata(self) -> None:
         @task(
             "noop",
             interval=timedelta(minutes=5),
-            channel="#ott-alerts",
+            channel=OTT_ALERTS,
             help="does nothing",
         )
         async def handler(ctx: TaskContext) -> None: ...
@@ -37,16 +38,16 @@ class TestTaskMarker:
         assert meta.name == "noop"
         assert meta.handler is handler
         assert meta.interval == timedelta(minutes=5)
-        assert meta.channel == "#ott-alerts"
+        assert meta.channel == OTT_ALERTS
         assert meta.help == "does nothing"
 
     def test_module_tasks_collects_marked_handlers(self) -> None:
         module = types.ModuleType("fake")
 
-        @task("first", interval=timedelta(minutes=1), channel="public")
+        @task("first", interval=timedelta(minutes=1), channel=PUBLIC)
         async def first(ctx: TaskContext) -> None: ...
 
-        @task("second", interval=timedelta(minutes=1), channel="public")
+        @task("second", interval=timedelta(minutes=1), channel=PUBLIC)
         async def second(ctx: TaskContext) -> None: ...
 
         # module_tasks only keeps handlers defined in the module itself.
@@ -72,7 +73,7 @@ class TestTaskMarker:
         # A handler defined elsewhere but imported into a module must not be
         # picked up, so importing another task's handler can't register it
         # twice.
-        @task("noop", interval=timedelta(minutes=1), channel="public")
+        @task("noop", interval=timedelta(minutes=1), channel=PUBLIC)
         async def handler(ctx: TaskContext) -> None: ...
 
         handler.__module__ = "somewhere_else"
@@ -92,7 +93,7 @@ class TestTaskRegistry:
             name="noop",
             handler=handler,
             interval=timedelta(minutes=1),
-            channel="public",
+            channel=PUBLIC,
         )
         bot.add_task(scheduled)
         assert bot.task_registry.all() == [scheduled]
@@ -101,7 +102,7 @@ class TestTaskRegistry:
         @bot.task(
             "noop",
             interval=timedelta(minutes=1),
-            channel="#ott-alerts",
+            channel=OTT_ALERTS,
             help="does nothing",
         )
         async def handler(ctx: TaskContext) -> None: ...
@@ -109,7 +110,7 @@ class TestTaskRegistry:
         (registered,) = bot.task_registry.all()
         assert registered.name == "noop"
         assert registered.handler is handler
-        assert registered.channel == "#ott-alerts"
+        assert registered.channel == OTT_ALERTS
         assert registered.help == "does nothing"
 
 
@@ -140,7 +141,7 @@ class TestTaskLoading:
     def test_register_module_registers_marked_tasks(self, bot: MeshBot) -> None:
         module = types.ModuleType("fake")
 
-        @task("noop", interval=timedelta(minutes=1), channel="public")
+        @task("noop", interval=timedelta(minutes=1), channel=PUBLIC)
         async def handler(ctx: TaskContext) -> None: ...
 
         handler.__module__ = "fake"

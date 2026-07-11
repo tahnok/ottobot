@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from ottobot.channels import CHANNELS
 from ottobot.config import BotConfig, load_config, parse_config
 
 
@@ -15,27 +16,14 @@ def test_full_config_round_trips() -> None:
         name = "ottobot"
         private_key = "%s"
 
-        [[channels]]
-        index = 0
-        name = "public"
-
-        [[channels]]
-        index = 1
-        name = "private"
-        secret = "%s"
-
         [radio]
         freq = 910.525
         bw = 250.0
         sf = 11
         cr = 5
-        """ % ("ab" * 64, "cd" * 16))
+        """ % ("ab" * 64))
     assert config.name == "ottobot"
     assert config.private_key == bytes.fromhex("ab" * 64)
-    assert [(c.index, c.name, c.secret) for c in config.channels] == [
-        (0, "public", None),
-        (1, "private", bytes.fromhex("cd" * 16)),
-    ]
     assert config.radio is not None
     assert (config.radio.freq, config.radio.bw, config.radio.sf, config.radio.cr) == (
         910.525,
@@ -50,14 +38,15 @@ def test_empty_config_defaults_to_none() -> None:
     assert config == BotConfig()
     assert config.name is None
     assert config.private_key is None
-    assert config.channels == ()
+    # Channels aren't config; they default to the shared code-defined set.
+    assert config.channels == CHANNELS
     assert config.radio is None
 
 
 def test_name_only() -> None:
     config = parse('name = "bot"')
     assert config.name == "bot"
-    assert config.channels == ()
+    assert config.channels == CHANNELS
     assert config.radio is None
 
 
@@ -78,24 +67,6 @@ def test_bad_private_key_hex() -> None:
 def test_private_key_wrong_length() -> None:
     with pytest.raises(ValueError, match="private_key must be 64 bytes"):
         parse('private_key = "abcd"')
-
-
-def test_channel_secret_wrong_length() -> None:
-    with pytest.raises(ValueError, match="channel secret must be 16 bytes"):
-        parse("""
-            [[channels]]
-            index = 0
-            name = "public"
-            secret = "abcd"
-            """)
-
-
-def test_channel_requires_index_and_name() -> None:
-    with pytest.raises(ValueError, match="index and a name"):
-        parse("""
-            [[channels]]
-            name = "public"
-            """)
 
 
 def test_radio_missing_keys() -> None:
@@ -129,54 +100,6 @@ def test_discord_webhook_url_is_parsed() -> None:
 
 def test_discord_webhook_url_defaults_to_none() -> None:
     assert parse('name = "bot"').discord_webhook_url is None
-
-
-def test_channel_idx_finds_named_channel() -> None:
-    config = parse("""
-        [[channels]]
-        index = 0
-        name = "public"
-
-        [[channels]]
-        index = 2
-        name = "#ott-alerts"
-        """)
-    assert config.channel_idx("#ott-alerts") == 2
-
-
-def test_channel_idx_is_case_insensitive() -> None:
-    config = parse("""
-        [[channels]]
-        index = 1
-        name = "#Ott-Alerts"
-        """)
-    assert config.channel_idx("#ott-alerts") == 1
-
-
-def test_channel_idx_returns_none_when_channel_missing() -> None:
-    assert BotConfig().channel_idx("#ott-alerts") is None
-
-
-def test_public_channel_idx_defaults_to_zero() -> None:
-    assert BotConfig().public_channel_idx() == 0
-
-
-def test_public_channel_idx_finds_named_channel() -> None:
-    config = parse("""
-        [[channels]]
-        index = 2
-        name = "public"
-        """)
-    assert config.public_channel_idx() == 2
-
-
-def test_public_channel_idx_is_case_insensitive() -> None:
-    config = parse("""
-        [[channels]]
-        index = 3
-        name = "Public"
-        """)
-    assert config.public_channel_idx() == 3
 
 
 def test_load_config_reads_file(tmp_path) -> None:

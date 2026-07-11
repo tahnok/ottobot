@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from ottobot.channels import OTT_ALERTS
 from ottobot.config import BotConfig
 from ottobot.context import TaskContext
 from ottobot.registry import module_tasks
@@ -80,7 +81,7 @@ def make_ctx(replies: list[str]) -> TaskContext:
 
 def test_task_announces_on_the_ott_alerts_channel() -> None:
     (scheduled,) = module_tasks(alerts_mod)
-    assert scheduled.channel == "#ott-alerts"
+    assert scheduled.channel is OTT_ALERTS
 
 
 class TestParseAlerts:

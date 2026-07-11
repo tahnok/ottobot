@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from ottobot import Context, MeshBot, TaskContext
+from ottobot.channels import PUBLIC
 from ottobot.cli import parse_args
 from ottobot.simulator import Simulator
 
@@ -114,7 +115,7 @@ class TestControls:
 
 class TestTaskControl:
     async def test_runs_named_task_and_prints_replies(self, sim: Simulator) -> None:
-        @sim.bot.task("greet", interval=timedelta(hours=1), channel="public")
+        @sim.bot.task("greet", interval=timedelta(hours=1), channel=PUBLIC)
         async def greet(ctx: TaskContext) -> str:
             return "hello mesh"
 
@@ -123,7 +124,7 @@ class TestTaskControl:
     async def test_task_using_ctx_reply_for_multiple_lines(
         self, sim: Simulator
     ) -> None:
-        @sim.bot.task("multi", interval=timedelta(hours=1), channel="public")
+        @sim.bot.task("multi", interval=timedelta(hours=1), channel=PUBLIC)
         async def multi(ctx: TaskContext) -> None:
             await ctx.reply("one")
             await ctx.reply("two")
@@ -131,7 +132,7 @@ class TestTaskControl:
         assert await sim.handle_line("/task multi") == ["task> one", "task> two"]
 
     async def test_task_with_no_output(self, sim: Simulator) -> None:
-        @sim.bot.task("quiet", interval=timedelta(hours=1), channel="public")
+        @sim.bot.task("quiet", interval=timedelta(hours=1), channel=PUBLIC)
         async def quiet(ctx: TaskContext) -> None:
             return None
 
@@ -143,7 +144,7 @@ class TestTaskControl:
         ]
 
     async def test_no_name_lists_available_tasks(self, sim: Simulator) -> None:
-        @sim.bot.task("greet", interval=timedelta(hours=1), channel="public")
+        @sim.bot.task("greet", interval=timedelta(hours=1), channel=PUBLIC)
         async def greet(ctx: TaskContext) -> str:
             return "hi"
 

@@ -5,17 +5,15 @@ from pathlib import Path
 
 from helpers import ReplyRecorder, channel_msg, dm
 from ottobot import IncomingMessage, MeshBot
-from ottobot.config import BotConfig, ChannelConfig
+from ottobot.config import BotConfig
 from ottobot.sinks import register_module
 from ottobot.sinks import welcome as welcome_module
 from ottobot.sinks.welcome import WELCOME
 
 
-async def make_welcome_bot(
-    db_path: Path, channels: tuple[ChannelConfig, ...] = ()
-) -> MeshBot:
+async def make_welcome_bot(db_path: Path) -> MeshBot:
     """A bot with only the welcome sink loaded and its table created."""
-    config = BotConfig(database=db_path, channels=channels)
+    config = BotConfig(database=db_path)
     bot = MeshBot(name="ottobot", config=config)
     register_module(bot, welcome_module)
     await bot.setup()
@@ -80,27 +78,11 @@ async def test_persists_across_restart(tmp_path: Path, reply: ReplyRecorder) -> 
 async def test_non_public_channel_is_ignored(
     tmp_path: Path, reply: ReplyRecorder
 ) -> None:
-    # With no channels configured, public_channel_idx() defaults to 0, so a
-    # message on any other index must not be welcomed.
+    # The bot greets only on the public channel (index 0); a message on any
+    # other channel it's joined must not be welcomed.
     bot = await make_welcome_bot(tmp_path / "seen.db")
     await bot.dispatch(chan("hi", "alice", idx=1), reply)
     assert reply.replies == []
-
-
-async def test_welcomes_only_on_the_configured_public_channel(
-    tmp_path: Path, reply: ReplyRecorder
-) -> None:
-    # "public" pinned to a non-zero index: only that channel greets, and the
-    # default idx 0 no longer does.
-    channels = (
-        ChannelConfig(index=0, name="general"),
-        ChannelConfig(index=2, name="public"),
-    )
-    bot = await make_welcome_bot(tmp_path / "seen.db", channels=channels)
-    await bot.dispatch(chan("hi", "alice", idx=0), reply)
-    assert reply.replies == []  # idx 0 is no longer the public channel
-    await bot.dispatch(chan("hi", "alice", idx=2), reply)
-    assert reply.replies == [WELCOME]  # idx 2 is the public channel
 
 
 async def test_setup_creates_the_table(tmp_path: Path) -> None:
