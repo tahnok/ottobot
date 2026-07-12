@@ -124,7 +124,7 @@ class Simulator:
                 return [f"unknown simulator control /{name} — try /help"]
 
     async def _run_task(self, name: str) -> list[str]:
-        tasks = self.bot.task_registry.all()
+        tasks = self.bot.tasks
         if not name:
             available = ", ".join(t.name for t in tasks) or "(none registered)"
             return [f"usage: /task <name> — available: {available}"]

@@ -1,4 +1,4 @@
-"""Tests for message sinks: the @sink marker, registry, dispatch, and loading.
+"""Tests for message sinks: the @sink marker, dispatch, and loading.
 
 These cover the sink machinery only — the welcome sink's own behavior is
 tested separately.
@@ -6,12 +6,10 @@ tested separately.
 
 import types
 
-import pytest
-
 from helpers import ReplyRecorder, addressed, channel_msg
-from ottobot import Context, Ottobot, Sink, sink
-from ottobot.registry import SinkRegistry, module_sinks
-from ottobot.sinks import load_sinks, register_module
+from ottobot import Context, Ottobot, sink
+from ottobot.registry import module_sinks
+from ottobot.sinks import register_module
 
 
 class TestSinkMarker:
@@ -20,13 +18,11 @@ class TestSinkMarker:
 
         assert sink()(handler) is handler
 
-    def test_decorator_attaches_sink_metadata(self) -> None:
+    def test_decorator_attaches_marker(self) -> None:
         @sink()
         async def handler(ctx: Context) -> None: ...
 
-        meta = getattr(handler, "_ottobot_sink")
-        assert isinstance(meta, Sink)
-        assert meta.handler is handler
+        assert getattr(handler, "_ottobot_sink") is handler
 
     def test_module_sinks_collects_marked_handlers(self) -> None:
         module = types.ModuleType("fake")
@@ -43,9 +39,7 @@ class TestSinkMarker:
         setattr(module, "first", first)
         setattr(module, "second", second)
 
-        sinks = module_sinks(module)
-        assert all(isinstance(s, Sink) for s in sinks)
-        assert {s.handler for s in sinks} == {first, second}
+        assert set(module_sinks(module)) == {first, second}
 
     def test_module_sinks_ignores_unmarked_functions(self) -> None:
         module = types.ModuleType("fake")
@@ -68,18 +62,6 @@ class TestSinkMarker:
         assert module_sinks(impostor) == []
 
 
-class TestSinkRegistry:
-    def test_empty_registry_has_no_sinks(self) -> None:
-        assert SinkRegistry().all() == []
-
-    def test_add_sink_registers_on_bot(self, bot: Ottobot) -> None:
-        async def handler(ctx: Context) -> None: ...
-
-        s = Sink(handler=handler)
-        bot.add_sink(s)
-        assert bot.sink_registry.all() == [s]
-
-
 class TestSinkDispatch:
     async def test_sink_runs_on_non_command_text(
         self, bot: Ottobot, reply: ReplyRecorder
@@ -89,7 +71,7 @@ class TestSinkDispatch:
         async def watch(ctx: Context) -> None:
             seen.append(ctx.message.text)
 
-        bot.add_sink(Sink(handler=watch))
+        bot.add_sink(watch)
         await bot.dispatch(channel_msg("just chatting"), reply)
         assert seen == ["just chatting"]
 
@@ -99,7 +81,7 @@ class TestSinkDispatch:
         async def greet(ctx: Context) -> str:
             return "hello"
 
-        bot.add_sink(Sink(handler=greet))
+        bot.add_sink(greet)
         await bot.dispatch(channel_msg("hi"), reply)
         assert reply.replies == ["hello"]
 
@@ -109,7 +91,7 @@ class TestSinkDispatch:
         async def quiet(ctx: Context) -> None:
             return None
 
-        bot.add_sink(Sink(handler=quiet))
+        bot.add_sink(quiet)
         await bot.dispatch(channel_msg("hi"), reply)
         assert reply.replies == []
 
@@ -127,8 +109,8 @@ class TestSinkDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        bot.add_sink(Sink(handler=boom))
-        bot.add_sink(Sink(handler=watcher))
+        bot.add_sink(boom)
+        bot.add_sink(watcher)
         await bot.dispatch(addressed("!ping"), reply)
         assert reply.replies == ["still here", "pong"]
 
@@ -141,8 +123,8 @@ class TestSinkDispatch:
         async def two(ctx: Context) -> str:
             return "2"
 
-        bot.add_sink(Sink(handler=one))
-        bot.add_sink(Sink(handler=two))
+        bot.add_sink(one)
+        bot.add_sink(two)
         await bot.dispatch(channel_msg("hi"), reply)
         assert set(reply.replies) == {"1", "2"}
 
@@ -155,7 +137,7 @@ class TestSinkDispatch:
             captured["command_name"] = ctx.command_name
             captured["args"] = ctx.args
 
-        bot.add_sink(Sink(handler=cap))
+        bot.add_sink(cap)
         await bot.dispatch(channel_msg("!ping extra"), reply)
         assert captured == {"command_name": None, "args": "!ping extra"}
 
@@ -170,7 +152,7 @@ class TestSinkDispatch:
         async def watch(ctx: Context) -> None:
             seen.append(ctx.message.text)
 
-        bot.add_sink(Sink(handler=watch))
+        bot.add_sink(watch)
         await bot.dispatch(channel_msg("hello channel"), reply)
         assert seen == ["hello channel"]
 
@@ -186,19 +168,5 @@ class TestSinkLoading:
         setattr(module, "watch", watch)
 
         registered = register_module(bot, module)
-        assert len(registered) == 1
-        assert bot.sink_registry.all() == registered
-
-    def test_module_without_sinks_is_rejected(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import ottobot.sinks as sinks_pkg
-
-        monkeypatch.setattr(sinks_pkg, "iter_module_names", lambda: ["broken"])
-        monkeypatch.setattr(
-            sinks_pkg.importlib,
-            "import_module",
-            lambda name: types.ModuleType(name),
-        )
-        with pytest.raises(TypeError, match="must define at least one @sink"):
-            load_sinks(Ottobot(name="ottobot"))
+        assert registered == [watch]
+        assert bot.sinks == registered

@@ -1,9 +1,16 @@
-"""Command registration and lookup."""
+"""Handler markers: the @command/@sink/@task/@on_start decorators.
+
+These only attach metadata to module-level coroutines — no bot instance is
+needed at import time. The modules under ottobot.commands / ottobot.sinks /
+ottobot.tasks use them; the loaders (see ottobot.discovery) later collect
+the marked handlers via the module_*() functions and register them on the
+bot.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -41,18 +48,12 @@ class Command:
 
 
 @dataclass
-class Sink:
-    """A function that's called on every message the bot receives."""
-
-    handler: CommandHandler
-
-
-@dataclass
 class ScheduledTask:
     """A named handler that's run on a timer instead of in response to a message.
 
-    channel is the channel the task's output is broadcast on, referenced
-    directly as one of the ``ottobot.channels`` constants (e.g. ``OTT_ALERTS``).
+    interval is how often the runner calls the handler. channel is the
+    channel the task's output is broadcast on, referenced directly as one
+    of the ``ottobot.channels`` constants (e.g. ``OTT_ALERTS``).
     """
 
     name: str
@@ -62,13 +63,6 @@ class ScheduledTask:
     help: str = ""
 
 
-@dataclass
-class OnStart:
-    """A coroutine run once at boot, before the bot handles any messages."""
-
-    handler: OnStartHandler
-
-
 def command(
     name: str,
     *,
@@ -76,47 +70,13 @@ def command(
     aliases: tuple[str, ...] = (),
     requires_address: bool = True,
 ) -> Callable[[CommandHandler], CommandHandler]:
-    """Mark a module-level coroutine as a command handler.
-
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The command modules under
-    ottobot.commands use this; load_commands() later collects the
-    marked handlers via module_commands() and registers them on the bot.
-
-    See Command for what requires_address does.
-    """
+    """Mark a module-level coroutine as a command handler."""
 
     def decorator(handler: CommandHandler) -> CommandHandler:
         setattr(
             handler,
             _COMMAND_ATTR,
-            Command(
-                name=name,
-                handler=handler,
-                help=help,
-                aliases=aliases,
-                requires_address=requires_address,
-            ),
-        )
-        return handler
-
-    return decorator
-
-
-def sink() -> Callable[[CommandHandler], CommandHandler]:
-    """Mark a module-level coroutine as a message sink.
-
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The sink modules under
-    ottobot.sinks use this; load_sinks() later collects the
-    marked handlers via module_sinks() and registers them on the bot.
-    """
-
-    def decorator(handler: CommandHandler) -> CommandHandler:
-        setattr(
-            handler,
-            _SINK_ATTR,
-            Sink(handler=handler),
+            Command(name, handler, help, aliases, requires_address),
         )
         return handler
 
@@ -126,28 +86,22 @@ def sink() -> Callable[[CommandHandler], CommandHandler]:
 def task(
     name: str, *, interval: timedelta, channel: "ChannelConfig", help: str = ""
 ) -> Callable[[TaskHandler], TaskHandler]:
-    """Mark a module-level coroutine as a scheduled task handler.
-
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The task modules under ottobot.tasks use
-    this; load_tasks() later collects the marked handlers via
-    module_tasks() and registers them on the bot. interval is how often
-    the runner calls the handler; channel is the ottobot.channels constant
-    the task's output is broadcast on.
-    """
+    """Mark a module-level coroutine as a scheduled task handler."""
 
     def decorator(handler: TaskHandler) -> TaskHandler:
         setattr(
-            handler,
-            _TASK_ATTR,
-            ScheduledTask(
-                name=name,
-                handler=handler,
-                interval=interval,
-                channel=channel,
-                help=help,
-            ),
+            handler, _TASK_ATTR, ScheduledTask(name, handler, interval, channel, help)
         )
+        return handler
+
+    return decorator
+
+
+def sink() -> Callable[[CommandHandler], CommandHandler]:
+    """Mark a module-level coroutine as a message sink (sees every message)."""
+
+    def decorator(handler: CommandHandler) -> CommandHandler:
+        setattr(handler, _SINK_ATTR, handler)
         return handler
 
     return decorator
@@ -156,125 +110,47 @@ def task(
 def on_start() -> Callable[[OnStartHandler], OnStartHandler]:
     """Mark a module-level coroutine to run once at boot.
 
-    Like @sink, this only attaches metadata at import time. The loaders
-    collect marked handlers via module_on_start() and register them on the
-    bot; Ottobot.setup() awaits them all before the first message, passing
-    the bot so the hook can read its config (e.g. db_path).
+    Ottobot.setup() awaits every registered hook before the first message,
+    passing the bot so the hook can read its config (e.g. database path).
     """
 
     def decorator(handler: OnStartHandler) -> OnStartHandler:
-        setattr(handler, _ON_START_ATTR, OnStart(handler=handler))
+        setattr(handler, _ON_START_ATTR, handler)
         return handler
 
     return decorator
 
 
-def module_commands(module: ModuleType) -> list[Command]:
-    """The @command-marked handlers defined in *module*, in definition order.
+def _marked(module: ModuleType, attr: str) -> list:
+    """The *attr* markers on objects defined in *module*, in definition order.
 
     Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another command's handler can't register
-    it twice.
-    """
-    return [
-        cmd
-        for obj in vars(module).values()
-        if (cmd := getattr(obj, _COMMAND_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
-
-
-def module_sinks(module: ModuleType) -> list[Sink]:
-    """The @sink-marked handlers defined in *module*, in definition order.
-
-    Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another sink's handler can't register
-    it twice.
-    """
-    return [
-        cmd
-        for obj in vars(module).values()
-        if (cmd := getattr(obj, _SINK_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
-
-
-def module_tasks(module: ModuleType) -> list[ScheduledTask]:
-    """The @task-marked handlers defined in *module*, in definition order.
-
-    Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another task's handler can't register it
+    are excluded, so importing another module's handler can't register it
     twice.
     """
     return [
-        t
+        marker
         for obj in vars(module).values()
-        if (t := getattr(obj, _TASK_ATTR, None)) is not None
+        if (marker := getattr(obj, attr, None)) is not None
         and getattr(obj, "__module__", None) == module.__name__
     ]
 
 
-def module_on_start(module: ModuleType) -> list[OnStart]:
-    """The @on_start-marked handlers defined in *module*, in definition order.
-
-    Handlers merely imported into the module are excluded, mirroring
-    module_commands/module_sinks.
-    """
-    return [
-        hook
-        for obj in vars(module).values()
-        if (hook := getattr(obj, _ON_START_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
+def module_commands(module: ModuleType) -> list[Command]:
+    """The @command-marked handlers defined in *module*, as Command objects."""
+    return _marked(module, _COMMAND_ATTR)
 
 
-@dataclass
-class CommandRegistry:
-    """Holds commands and resolves names (including aliases) to them."""
-
-    _commands: dict[str, Command] = field(default_factory=dict)
-    _lookup: dict[str, Command] = field(default_factory=dict)
-
-    def register(self, command: Command) -> None:
-        for name in (command.name, *command.aliases):
-            key = name.lower()
-            if key in self._lookup:
-                raise ValueError(f"command name {name!r} is already registered")
-        self._commands[command.name.lower()] = command
-        for name in (command.name, *command.aliases):
-            self._lookup[name.lower()] = command
-
-    def get(self, name: str) -> Command | None:
-        return self._lookup.get(name.lower())
-
-    def all(self) -> list[Command]:
-        """All registered commands, sorted by name (aliases excluded)."""
-        return sorted(self._commands.values(), key=lambda c: c.name)
+def module_sinks(module: ModuleType) -> list[CommandHandler]:
+    """The @sink-marked handlers defined in *module*."""
+    return _marked(module, _SINK_ATTR)
 
 
-@dataclass
-class SinkRegistry:
-    """Holds sinks."""
-
-    _sinks: list[Sink] = field(default_factory=list)
-
-    def register(self, sink: Sink) -> None:
-        self._sinks.append(sink)
-
-    def all(self) -> list[Sink]:
-        """All registered sinks."""
-        return self._sinks
+def module_tasks(module: ModuleType) -> list[ScheduledTask]:
+    """The @task-marked handlers defined in *module*, as ScheduledTask objects."""
+    return _marked(module, _TASK_ATTR)
 
 
-@dataclass
-class TaskRegistry:
-    """Holds scheduled tasks."""
-
-    _tasks: list[ScheduledTask] = field(default_factory=list)
-
-    def register(self, task: ScheduledTask) -> None:
-        self._tasks.append(task)
-
-    def all(self) -> list[ScheduledTask]:
-        """All registered tasks."""
-        return self._tasks
+def module_on_start(module: ModuleType) -> list[OnStartHandler]:
+    """The @on_start-marked handlers defined in *module*."""
+    return _marked(module, _ON_START_ATTR)

@@ -1,18 +1,23 @@
-"""Tests for auto-discovery of command modules."""
+"""Tests for auto-discovery of command/sink/task modules."""
 
 import importlib
 import types
 
 import pytest
 
+import ottobot.commands as commands_pkg
 from ottobot import Ottobot
+from ottobot import discovery
 from ottobot.cli import build_bot
-from ottobot.commands import iter_command_module_names, load_commands
+from ottobot.commands import load_commands
+from ottobot.discovery import iter_module_names
 from ottobot.registry import module_commands
+from ottobot.sinks import load_sinks
+from ottobot.tasks import load_tasks
 
 
 def test_every_command_module_defines_a_command() -> None:
-    for name in iter_command_module_names():
+    for name in iter_module_names(commands_pkg.__path__):
         module = importlib.import_module(f"ottobot.commands.{name}")
         assert module_commands(
             module
@@ -21,33 +26,35 @@ def test_every_command_module_defines_a_command() -> None:
 
 def test_load_commands_loads_all_modules() -> None:
     loaded = load_commands(Ottobot(name="ottobot"))
-    assert loaded == iter_command_module_names()
+    assert loaded == iter_module_names(commands_pkg.__path__)
     assert {"ping", "echo", "roll"} <= set(loaded)
 
 
 def test_no_name_collisions_across_command_files() -> None:
-    # CommandRegistry raises ValueError on duplicates; a clean load proves
-    # no two files claim the same command name or alias.
+    # Ottobot.add_command raises ValueError on duplicates; a clean load
+    # proves no two files claim the same command name or alias.
     load_commands(Ottobot(name="ottobot"))
 
 
 def test_build_bot_exposes_all_commands() -> None:
     bot = build_bot(name="ottobot")
     for name in ("help", "ping", "echo", "roll", "dice"):
-        assert bot.registry.get(name) is not None
+        assert bot.get_command(name) is not None
 
 
-def test_module_without_commands_is_rejected(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "load, kind",
+    [(load_commands, "@command"), (load_sinks, "@sink"), (load_tasks, "@task")],
+)
+def test_module_without_handlers_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, load, kind
 ) -> None:
-    import ottobot.commands as commands_pkg
-
-    monkeypatch.setattr(commands_pkg, "iter_command_module_names", lambda: ["broken"])
+    monkeypatch.setattr(discovery, "iter_module_names", lambda path: ["broken"])
     monkeypatch.setattr(
-        commands_pkg.importlib, "import_module", lambda name: types.ModuleType(name)
+        discovery.importlib, "import_module", lambda name: types.ModuleType(name)
     )
-    with pytest.raises(TypeError, match="must define at least one @command"):
-        load_commands(Ottobot(name="ottobot"))
+    with pytest.raises(TypeError, match=f"must define at least one {kind}"):
+        load(Ottobot(name="ottobot"))
 
 
 def test_imported_handlers_are_not_re_registered() -> None:

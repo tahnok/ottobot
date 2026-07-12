@@ -33,7 +33,6 @@ DEFAULT_MAX_CHANNELS = 8
 # secret-less channel, which is right for "#hashtag" channels but wrong for
 # "public" — a device keyed that way silently fails to decrypt all public
 # traffic. We substitute the real key here so a secret-less "public" works.
-PUBLIC_CHANNEL_NAME = PUBLIC.name
 PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 
 # Path hash mode value for 2-byte-per-hop path hashes (mode N means N+1
@@ -103,7 +102,7 @@ async def fetch_channels(mc: MeshCoreLike) -> list[dict[str, Any]]:
     return channels
 
 
-async def _apply(description: str, result: Event) -> None:
+def _apply(description: str, result: Event) -> None:
     """Log the outcome of one device-setting command."""
     if result.type == EventType.ERROR:
         logger.warning("failed to %s: %r", description, result.payload)
@@ -120,25 +119,23 @@ async def apply_settings(mc: MeshCoreLike, config: BotConfig) -> None:
     and path hash mode are hardcoded (see ``ottobot.channels`` /
     ``ottobot.radio``) and always applied so every Ottawa bot matches.
     """
-    await _apply(
+    _apply(
         "path hash mode=2-byte",
         await mc.commands.set_path_hash_mode(PATH_HASH_MODE_2_BYTE),
     )
     if config.name:
-        await _apply(f"name={config.name!r}", await mc.commands.set_name(config.name))
+        _apply(f"name={config.name!r}", await mc.commands.set_name(config.name))
     if config.private_key is not None:
-        await _apply(
-            "private key", await mc.commands.import_private_key(config.private_key)
-        )
+        _apply("private key", await mc.commands.import_private_key(config.private_key))
     for channel in config.channels:
         secret = channel.secret
-        if secret is None and channel.name.lower() == PUBLIC_CHANNEL_NAME:
+        if secret is None and channel.name.lower() == PUBLIC.name:
             secret = PUBLIC_CHANNEL_KEY
-        await _apply(
+        _apply(
             f"channel {channel.index} name={channel.name!r}",
             await mc.commands.set_channel(channel.index, channel.name, secret),
         )
-    await _apply(
+    _apply(
         f"radio freq={RADIO.freq} bw={RADIO.bw} sf={RADIO.sf} cr={RADIO.cr}",
         await mc.commands.set_radio(RADIO.freq, RADIO.bw, RADIO.sf, RADIO.cr),
     )
@@ -192,7 +189,7 @@ class MeshCoreRunner:
         await self._log_channels()
         self._scheduled_tasks = [
             asyncio.create_task(self._run_scheduled_task(scheduled))
-            for scheduled in self.bot.task_registry.all()
+            for scheduled in self.bot.tasks
         ]
         logger.info("bot started as %r, listening for messages", self.bot.name)
 

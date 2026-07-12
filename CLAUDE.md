@@ -39,10 +39,12 @@ check flags.
 
 ## Architecture
 
-The core bot logic (`bot.py`, `context.py`, `registry.py`) is
-transport-agnostic and knows nothing about meshcore/radios. `runner.py` is
-the only module that talks to the real `meshcore` library; `simulator.py`
-provides an in-memory REPL for trying commands without a device. Commands
+The core bot logic (`bot.py`, `context.py`, `registry.py`, `discovery.py`)
+is transport-agnostic and knows nothing about meshcore/radios. `runner.py`
+is the only module that talks to the real `meshcore` library;
+`simulator.py` provides an in-memory REPL for trying commands without a
+device. `registry.py` holds the `@command`/`@sink`/`@task`/`@on_start`
+markers and `discovery.py` the shared module auto-discovery. Commands
 live one-per-file in `src/ottobot/commands/`, auto-discovered by
 `load_commands()`. Sinks (handlers that see every message) live in
 `src/ottobot/sinks/`, loaded by `load_sinks()`. Scheduled tasks (handlers

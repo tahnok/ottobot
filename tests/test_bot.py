@@ -32,7 +32,7 @@ class TestRegistration:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        command = bot.registry.get("ping")
+        command = bot.get_command("ping")
         assert command is not None
         assert command.help == "pong back"
 
@@ -41,14 +41,14 @@ class TestRegistration:
         async def weather(ctx: Context) -> str:
             return "sunny"
 
-        assert bot.registry.get("wx") is bot.registry.get("weather")
+        assert bot.get_command("wx") is bot.get_command("weather")
 
     def test_lookup_is_case_insensitive(self, bot: Ottobot) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        assert bot.registry.get("PING") is not None
+        assert bot.get_command("PING") is not None
 
     def test_duplicate_name_rejected(self, bot: Ottobot) -> None:
         @bot.command("ping")

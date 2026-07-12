@@ -1,4 +1,4 @@
-"""Tests for scheduled tasks: the @task marker, registry, and loading.
+"""Tests for scheduled tasks: the @task marker, registration, and loading.
 
 These cover the task machinery only — the weather_alerts task's own
 behavior is tested separately.
@@ -8,13 +8,14 @@ import importlib
 import types
 from datetime import timedelta
 
-import pytest
-
+import ottobot.tasks as tasks_pkg
 from ottobot import Ottobot, ScheduledTask, task, TaskContext
 from ottobot.channels import OTT_ALERTS, PUBLIC
 from ottobot.cli import build_bot
-from ottobot.registry import TaskRegistry, module_tasks
-from ottobot.tasks import iter_module_names, load_tasks, register_module
+from ottobot.config import BotConfig
+from ottobot.discovery import iter_module_names
+from ottobot.registry import module_tasks
+from ottobot.tasks import load_tasks, register_module
 
 
 class TestTaskMarker:
@@ -82,10 +83,7 @@ class TestTaskMarker:
         assert module_tasks(impostor) == []
 
 
-class TestTaskRegistry:
-    def test_empty_registry_has_no_tasks(self) -> None:
-        assert TaskRegistry().all() == []
-
+class TestTaskRegistration:
     def test_add_task_registers_on_bot(self, bot: Ottobot) -> None:
         async def handler(ctx: TaskContext) -> None: ...
 
@@ -96,7 +94,7 @@ class TestTaskRegistry:
             channel=PUBLIC,
         )
         bot.add_task(scheduled)
-        assert bot.task_registry.all() == [scheduled]
+        assert bot.tasks == [scheduled]
 
     def test_bot_task_decorator_registers(self, bot: Ottobot) -> None:
         @bot.task(
@@ -107,7 +105,7 @@ class TestTaskRegistry:
         )
         async def handler(ctx: TaskContext) -> None: ...
 
-        (registered,) = bot.task_registry.all()
+        (registered,) = bot.tasks
         assert registered.name == "noop"
         assert registered.handler is handler
         assert registered.channel == OTT_ALERTS
@@ -126,8 +124,6 @@ class TestTaskInvocation:
 
         async def reply(text: str) -> None:
             replies.append(text)
-
-        from ottobot.config import BotConfig
 
         ctx = TaskContext(
             _reply=reply, config=BotConfig(discord_webhook_url="https://x")
@@ -149,29 +145,15 @@ class TestTaskLoading:
 
         registered = register_module(bot, module)
         assert len(registered) == 1
-        assert bot.task_registry.all() == registered
-
-    def test_module_without_tasks_is_rejected(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        import ottobot.tasks as tasks_pkg
-
-        monkeypatch.setattr(tasks_pkg, "iter_module_names", lambda: ["broken"])
-        monkeypatch.setattr(
-            tasks_pkg.importlib,
-            "import_module",
-            lambda name: types.ModuleType(name),
-        )
-        with pytest.raises(TypeError, match="must define at least one @task"):
-            load_tasks(Ottobot(name="ottobot"))
+        assert bot.tasks == registered
 
     def test_load_tasks_loads_weather_alerts(self) -> None:
         loaded = load_tasks(Ottobot(name="ottobot"))
-        assert loaded == iter_module_names()
+        assert loaded == iter_module_names(tasks_pkg.__path__)
         assert "weather_alerts" in loaded
 
     def test_every_task_module_defines_a_task(self) -> None:
-        for name in iter_module_names():
+        for name in iter_module_names(tasks_pkg.__path__):
             module = importlib.import_module(f"ottobot.tasks.{name}")
             assert module_tasks(
                 module
@@ -179,5 +161,5 @@ class TestTaskLoading:
 
     def test_build_bot_exposes_all_tasks(self) -> None:
         bot = build_bot(name="ottobot")
-        names = {t.name for t in bot.task_registry.all()}
+        names = {t.name for t in bot.tasks}
         assert "weather_alerts" in names
