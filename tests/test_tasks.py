@@ -10,7 +10,7 @@ from datetime import timedelta
 
 import pytest
 
-from ottobot import OttoBot, ScheduledTask, task, TaskContext
+from ottobot import Ottobot, ScheduledTask, task, TaskContext
 from ottobot.channels import OTT_ALERTS, PUBLIC
 from ottobot.cli import build_bot
 from ottobot.registry import TaskRegistry, module_tasks
@@ -86,7 +86,7 @@ class TestTaskRegistry:
     def test_empty_registry_has_no_tasks(self) -> None:
         assert TaskRegistry().all() == []
 
-    def test_add_task_registers_on_bot(self, bot: OttoBot) -> None:
+    def test_add_task_registers_on_bot(self, bot: Ottobot) -> None:
         async def handler(ctx: TaskContext) -> None: ...
 
         scheduled = ScheduledTask(
@@ -98,7 +98,7 @@ class TestTaskRegistry:
         bot.add_task(scheduled)
         assert bot.task_registry.all() == [scheduled]
 
-    def test_bot_task_decorator_registers(self, bot: OttoBot) -> None:
+    def test_bot_task_decorator_registers(self, bot: Ottobot) -> None:
         @bot.task(
             "noop",
             interval=timedelta(minutes=1),
@@ -138,7 +138,7 @@ class TestTaskInvocation:
 
 
 class TestTaskLoading:
-    def test_register_module_registers_marked_tasks(self, bot: OttoBot) -> None:
+    def test_register_module_registers_marked_tasks(self, bot: Ottobot) -> None:
         module = types.ModuleType("fake")
 
         @task("noop", interval=timedelta(minutes=1), channel=PUBLIC)
@@ -163,10 +163,10 @@ class TestTaskLoading:
             lambda name: types.ModuleType(name),
         )
         with pytest.raises(TypeError, match="must define at least one @task"):
-            load_tasks(OttoBot(name="ottobot"))
+            load_tasks(Ottobot(name="ottobot"))
 
     def test_load_tasks_loads_weather_alerts(self) -> None:
-        loaded = load_tasks(OttoBot(name="ottobot"))
+        loaded = load_tasks(Ottobot(name="ottobot"))
         assert loaded == iter_module_names()
         assert "weather_alerts" in loaded
 

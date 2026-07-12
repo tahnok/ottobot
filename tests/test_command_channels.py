@@ -1,18 +1,18 @@
 import pytest
 
 from helpers import ReplyRecorder, addressed
-from ottobot import OttoBot
+from ottobot import Ottobot
 from ottobot.commands import channels, register_module
 
 
 @pytest.fixture
-def bot() -> OttoBot:
-    bot = OttoBot(name="ottobot")
+def bot() -> Ottobot:
+    bot = Ottobot(name="ottobot")
     register_module(bot, channels)
     return bot
 
 
-async def test_channels_lists_all(bot: OttoBot, reply: ReplyRecorder) -> None:
+async def test_channels_lists_all(bot: Ottobot, reply: ReplyRecorder) -> None:
     await bot.dispatch(addressed("!channels"), reply)
     assert reply.replies == [
         "Channels: #ottawa #testing #hike #bike #hamradio "
@@ -21,7 +21,7 @@ async def test_channels_lists_all(bot: OttoBot, reply: ReplyRecorder) -> None:
 
 
 async def test_channels_fits_in_short_message(
-    bot: OttoBot, reply: ReplyRecorder
+    bot: Ottobot, reply: ReplyRecorder
 ) -> None:
     await bot.dispatch(addressed("!channels"), reply)
     assert len(reply.replies[0]) <= 160

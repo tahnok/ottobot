@@ -4,17 +4,17 @@ import sqlite3
 from pathlib import Path
 
 from helpers import ReplyRecorder, channel_msg
-from ottobot import IncomingMessage, OttoBot
+from ottobot import IncomingMessage, Ottobot
 from ottobot.config import BotConfig
 from ottobot.sinks import register_module
 from ottobot.sinks import welcome as welcome_module
 from ottobot.sinks.welcome import WELCOME
 
 
-async def make_welcome_bot(db_path: Path) -> OttoBot:
+async def make_welcome_bot(db_path: Path) -> Ottobot:
     """A bot with only the welcome sink loaded and its table created."""
     config = BotConfig(database=db_path)
-    bot = OttoBot(name="ottobot", config=config)
+    bot = Ottobot(name="ottobot", config=config)
     register_module(bot, welcome_module)
     await bot.setup()
     return bot

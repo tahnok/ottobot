@@ -22,7 +22,7 @@ up automatically — there is no central list to edit.
    ```
 
 2. Create `tests/test_command_<name>.py`. Register only your module
-   against a fresh `OttoBot` and dispatch test messages — see
+   against a fresh `Ottobot` and dispatch test messages — see
    `tests/test_command_ping.py` for the shape.
 
 3. Run the tests and type checker:

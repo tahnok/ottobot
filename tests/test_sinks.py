@@ -9,7 +9,7 @@ import types
 import pytest
 
 from helpers import ReplyRecorder, addressed, channel_msg
-from ottobot import Context, OttoBot, Sink, sink
+from ottobot import Context, Ottobot, Sink, sink
 from ottobot.registry import SinkRegistry, module_sinks
 from ottobot.sinks import load_sinks, register_module
 
@@ -72,7 +72,7 @@ class TestSinkRegistry:
     def test_empty_registry_has_no_sinks(self) -> None:
         assert SinkRegistry().all() == []
 
-    def test_add_sink_registers_on_bot(self, bot: OttoBot) -> None:
+    def test_add_sink_registers_on_bot(self, bot: Ottobot) -> None:
         async def handler(ctx: Context) -> None: ...
 
         s = Sink(handler=handler)
@@ -82,7 +82,7 @@ class TestSinkRegistry:
 
 class TestSinkDispatch:
     async def test_sink_runs_on_non_command_text(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         seen: list[str] = []
 
@@ -94,7 +94,7 @@ class TestSinkDispatch:
         assert seen == ["just chatting"]
 
     async def test_sink_returned_string_is_sent_as_reply(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         async def greet(ctx: Context) -> str:
             return "hello"
@@ -104,7 +104,7 @@ class TestSinkDispatch:
         assert reply.replies == ["hello"]
 
     async def test_sink_returning_none_sends_nothing(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         async def quiet(ctx: Context) -> None:
             return None
@@ -114,7 +114,7 @@ class TestSinkDispatch:
         assert reply.replies == []
 
     async def test_raising_sink_does_not_stop_other_sinks_or_commands(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         # A broken sink must not suppress later sinks or command handling.
         async def boom(ctx: Context) -> str:
@@ -133,7 +133,7 @@ class TestSinkDispatch:
         assert reply.replies == ["still here", "pong"]
 
     async def test_all_registered_sinks_run(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         async def one(ctx: Context) -> str:
             return "1"
@@ -147,7 +147,7 @@ class TestSinkDispatch:
         assert set(reply.replies) == {"1", "2"}
 
     async def test_sink_context_has_no_command_name_and_full_text_args(
-        self, bot: OttoBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         captured: dict[str, object] = {}
 
@@ -164,7 +164,7 @@ class TestSinkDispatch:
     ) -> None:
         # Sinks observe every message, even ones the bot won't answer as a
         # command because it wasn't addressed by name.
-        bot = OttoBot(name="ottobot")
+        bot = Ottobot(name="ottobot")
         seen: list[str] = []
 
         async def watch(ctx: Context) -> None:
@@ -176,7 +176,7 @@ class TestSinkDispatch:
 
 
 class TestSinkLoading:
-    def test_register_module_registers_marked_sinks(self, bot: OttoBot) -> None:
+    def test_register_module_registers_marked_sinks(self, bot: Ottobot) -> None:
         module = types.ModuleType("fake")
 
         @sink()
@@ -201,4 +201,4 @@ class TestSinkLoading:
             lambda name: types.ModuleType(name),
         )
         with pytest.raises(TypeError, match="must define at least one @sink"):
-            load_sinks(OttoBot(name="ottobot"))
+            load_sinks(Ottobot(name="ottobot"))

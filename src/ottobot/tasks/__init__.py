@@ -24,7 +24,7 @@ import logging
 import pkgutil
 from types import ModuleType
 
-from ..bot import OttoBot
+from ..bot import Ottobot
 from ..registry import ScheduledTask, module_tasks
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def iter_module_names() -> list[str]:
     )
 
 
-def register_module(bot: OttoBot, module: ModuleType) -> list[ScheduledTask]:
+def register_module(bot: Ottobot, module: ModuleType) -> list[ScheduledTask]:
     """Register every @task-marked handler in *module* on *bot*.
 
     Returns the tasks that were registered. Tests use this to load a
@@ -51,7 +51,7 @@ def register_module(bot: OttoBot, module: ModuleType) -> list[ScheduledTask]:
     return tasks
 
 
-def load_tasks(bot: OttoBot) -> list[str]:
+def load_tasks(bot: Ottobot) -> list[str]:
     """Import every task module and register its @task handlers.
 
     Returns the module names that were loaded. Fails fast: a module with
