@@ -82,6 +82,10 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       XDG_CACHE_HOME: "/tmp/.cache"
+      # Timezone for log timestamps. Defaults to UTC; set an IANA zone name
+      # (e.g. America/Toronto) to see logs in local time. The image ships the
+      # tzdata database, so any zone name resolves.
+      TZ: "Etc/UTC"
 
     # Drop Linux capabilities. Serial access is granted by `devices:` plus
     # `group_add:`, not by capabilities.

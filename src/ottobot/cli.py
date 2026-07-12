@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import time
 from pathlib import Path
 
 from .bot import MeshBot
@@ -104,8 +105,21 @@ async def run(args: argparse.Namespace) -> None:
         await mc.disconnect()
 
 
+def apply_timezone() -> None:
+    """Honour the conventional TZ env var (e.g. TZ=America/Toronto) so log
+    timestamps are in the operator's local time rather than always UTC.
+
+    basicConfig's %(asctime)s formats via time.localtime, which only picks up
+    a TZ set in the environment after tzset() runs. No-op on platforms without
+    tzset (e.g. Windows).
+    """
+    if hasattr(time, "tzset"):
+        time.tzset()
+
+
 def main() -> None:
     args = parse_args()
+    apply_timezone()
     # Default level; the config may raise it or lower it once loaded (see run()).
     # force=True: the meshcore library calls basicConfig() at import time, so
     # the root logger already has a handler and this would otherwise be a no-op.
