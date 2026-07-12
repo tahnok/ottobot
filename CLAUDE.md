@@ -39,7 +39,7 @@ check flags.
 
 ## Architecture
 
-The core bot logic (`bot.py`, `context.py`, `registry.py`) is
+The core bot logic (`bot.py`, `context.py`, `registry.py`, `loader.py`) is
 transport-agnostic and knows nothing about meshcore/radios. `runner.py` is
 the only module that talks to the real `meshcore` library; `simulator.py`
 provides an in-memory REPL for trying commands without a device. Commands

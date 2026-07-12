@@ -10,7 +10,7 @@ import pytest
 
 from helpers import ReplyRecorder, addressed, channel_msg
 from ottobot import Context, Ottobot, Sink, sink
-from ottobot.registry import SinkRegistry, module_sinks
+from ottobot.registry import SinkRegistry, handler_markers, module_sinks
 from ottobot.sinks import load_sinks, register_module
 
 
@@ -24,7 +24,7 @@ class TestSinkMarker:
         @sink()
         async def handler(ctx: Context) -> None: ...
 
-        meta = getattr(handler, "_ottobot_sink")
+        (meta,) = handler_markers(handler)
         assert isinstance(meta, Sink)
         assert meta.handler is handler
 
@@ -192,11 +192,12 @@ class TestSinkLoading:
     def test_module_without_sinks_is_rejected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import ottobot.loader as loader_mod
         import ottobot.sinks as sinks_pkg
 
         monkeypatch.setattr(sinks_pkg, "iter_module_names", lambda: ["broken"])
         monkeypatch.setattr(
-            sinks_pkg.importlib,
+            loader_mod.importlib,
             "import_module",
             lambda name: types.ModuleType(name),
         )

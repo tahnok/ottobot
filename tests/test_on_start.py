@@ -3,7 +3,7 @@
 import types
 
 from ottobot import Ottobot, OnStart, on_start
-from ottobot.registry import module_on_start
+from ottobot.registry import handler_markers, module_on_start
 from ottobot.sinks import register_module
 
 
@@ -17,7 +17,7 @@ class TestOnStartMarker:
         @on_start()
         async def hook(bot: Ottobot) -> None: ...
 
-        meta = getattr(hook, "_ottobot_on_start")
+        (meta,) = handler_markers(hook)
         assert isinstance(meta, OnStart)
         assert meta.handler is hook
 

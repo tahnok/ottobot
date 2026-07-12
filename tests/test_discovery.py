@@ -41,10 +41,11 @@ def test_module_without_commands_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import ottobot.commands as commands_pkg
+    import ottobot.loader as loader_mod
 
     monkeypatch.setattr(commands_pkg, "iter_command_module_names", lambda: ["broken"])
     monkeypatch.setattr(
-        commands_pkg.importlib, "import_module", lambda name: types.ModuleType(name)
+        loader_mod.importlib, "import_module", lambda name: types.ModuleType(name)
     )
     with pytest.raises(TypeError, match="must define at least one @command"):
         load_commands(Ottobot(name="ottobot"))

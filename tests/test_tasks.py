@@ -13,7 +13,7 @@ import pytest
 from ottobot import Ottobot, ScheduledTask, task, TaskContext
 from ottobot.channels import OTT_ALERTS, PUBLIC
 from ottobot.cli import build_bot
-from ottobot.registry import TaskRegistry, module_tasks
+from ottobot.registry import TaskRegistry, handler_markers, module_tasks
 from ottobot.tasks import iter_module_names, load_tasks, register_module
 
 
@@ -33,7 +33,7 @@ class TestTaskMarker:
         )
         async def handler(ctx: TaskContext) -> None: ...
 
-        meta = getattr(handler, "_ottobot_task")
+        (meta,) = handler_markers(handler)
         assert isinstance(meta, ScheduledTask)
         assert meta.name == "noop"
         assert meta.handler is handler
@@ -154,11 +154,12 @@ class TestTaskLoading:
     def test_module_without_tasks_is_rejected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        import ottobot.loader as loader_mod
         import ottobot.tasks as tasks_pkg
 
         monkeypatch.setattr(tasks_pkg, "iter_module_names", lambda: ["broken"])
         monkeypatch.setattr(
-            tasks_pkg.importlib,
+            loader_mod.importlib,
             "import_module",
             lambda name: types.ModuleType(name),
         )

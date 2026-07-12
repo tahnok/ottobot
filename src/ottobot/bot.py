@@ -11,23 +11,29 @@ import logging
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import TypeVar
 
+from . import registry as _registry
 from .channels import ChannelConfig
 from .config import BotConfig
 from .registry import (
     Command,
     CommandHandler,
     CommandRegistry,
+    Marker,
     OnStart,
     ScheduledTask,
     Sink,
     SinkRegistry,
     TaskHandler,
     TaskRegistry,
+    handler_markers,
 )
 from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
+
+H = TypeVar("H", bound=Callable[..., object])
 
 
 class Ottobot:
@@ -75,39 +81,41 @@ class Ottobot:
         requires_address: bool = True,
     ) -> Callable[[CommandHandler], CommandHandler]:
         """Decorator that registers a command handler."""
-
-        def decorator(handler: CommandHandler) -> CommandHandler:
-            self.add_command(
-                Command(
-                    name=name,
-                    handler=handler,
-                    help=help,
-                    aliases=aliases,
-                    requires_address=requires_address,
-                )
+        return self._registering(
+            _registry.command(
+                name, help=help, aliases=aliases, requires_address=requires_address
             )
-            return handler
-
-        return decorator
+        )
 
     def task(
         self, name: str, *, interval: timedelta, channel: ChannelConfig, help: str = ""
     ) -> Callable[[TaskHandler], TaskHandler]:
         """Decorator that registers a scheduled task handler."""
+        return self._registering(
+            _registry.task(name, interval=interval, channel=channel, help=help)
+        )
 
-        def decorator(handler: TaskHandler) -> TaskHandler:
-            self.add_task(
-                ScheduledTask(
-                    name=name,
-                    handler=handler,
-                    interval=interval,
-                    channel=channel,
-                    help=help,
-                )
-            )
+    def _registering(self, mark: Callable[[H], H]) -> Callable[[H], H]:
+        """Wrap a registry marker decorator so the marker it attaches is
+        also registered on this bot."""
+
+        def decorator(handler: H) -> H:
+            mark(handler)
+            self.add_marker(handler_markers(handler)[-1])
             return handler
 
         return decorator
+
+    def add_marker(self, marker: Marker) -> None:
+        """Register a marker of any kind (the loaders dispatch through this)."""
+        if isinstance(marker, Command):
+            self.add_command(marker)
+        elif isinstance(marker, Sink):
+            self.add_sink(marker)
+        elif isinstance(marker, ScheduledTask):
+            self.add_task(marker)
+        else:
+            self.add_on_start(marker)
 
     def add_command(self, command: Command) -> None:
         self.registry.register(command)

@@ -1,4 +1,12 @@
-"""Command registration and lookup."""
+"""Handler markers, registration, and lookup.
+
+Commands, sinks, scheduled tasks, and on-start hooks all work the same
+way: a decorator (@command, @sink, @task, @on_start) attaches a marker
+dataclass to a module-level coroutine at import time — no bot instance
+needed — and the loaders (see ottobot.loader) later collect the marked
+handlers via the module_*() helpers and register them on the bot. Only
+the marker dataclasses differ; the machinery is shared.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
     from .bot import Ottobot
@@ -17,10 +25,9 @@ CommandHandler = Callable[["Context"], Awaitable[str | None]]
 TaskHandler = Callable[["TaskContext"], Awaitable[str | None]]
 OnStartHandler = Callable[["Ottobot"], Awaitable[None]]
 
-_COMMAND_ATTR = "_ottobot_command"
-_SINK_ATTR = "_ottobot_sink"
-_TASK_ATTR = "_ottobot_task"
-_ON_START_ATTR = "_ottobot_on_start"
+# All decorators attach their markers to this one attribute, as a list so
+# a handler can carry several markers (e.g. both @sink and @on_start).
+_MARKERS_ATTR = "_ottobot_markers"
 
 
 @dataclass
@@ -69,6 +76,36 @@ class OnStart:
     handler: OnStartHandler
 
 
+Marker = Command | Sink | ScheduledTask | OnStart
+
+H = TypeVar("H", bound=Callable[..., object])
+M = TypeVar("M", bound=Marker)
+T = TypeVar("T")
+
+
+def _marking(factory: Callable[[H], Marker]) -> Callable[[H], H]:
+    """The shared decorator body: attach the marker *factory* builds.
+
+    The handler is returned unchanged; the marker is appended to its
+    marker list so the module_*() collectors below can find it later.
+    """
+
+    def decorator(handler: H) -> H:
+        markers = getattr(handler, _MARKERS_ATTR, None)
+        if markers is None:
+            markers = []
+            setattr(handler, _MARKERS_ATTR, markers)
+        markers.append(factory(handler))
+        return handler
+
+    return decorator
+
+
+def handler_markers(handler: Callable[..., object]) -> list[Marker]:
+    """The markers the decorators attached to *handler*, oldest first."""
+    return list(getattr(handler, _MARKERS_ATTR, ()))
+
+
 def command(
     name: str,
     *,
@@ -78,49 +115,28 @@ def command(
 ) -> Callable[[CommandHandler], CommandHandler]:
     """Mark a module-level coroutine as a command handler.
 
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The command modules under
-    ottobot.commands use this; load_commands() later collects the
-    marked handlers via module_commands() and registers them on the bot.
-
-    See Command for what requires_address does.
+    The command modules under ottobot.commands use this; load_commands()
+    later registers the marked handlers on the bot. See Command for what
+    requires_address does.
     """
-
-    def decorator(handler: CommandHandler) -> CommandHandler:
-        setattr(
-            handler,
-            _COMMAND_ATTR,
-            Command(
-                name=name,
-                handler=handler,
-                help=help,
-                aliases=aliases,
-                requires_address=requires_address,
-            ),
+    return _marking(
+        lambda handler: Command(
+            name=name,
+            handler=handler,
+            help=help,
+            aliases=aliases,
+            requires_address=requires_address,
         )
-        return handler
-
-    return decorator
+    )
 
 
 def sink() -> Callable[[CommandHandler], CommandHandler]:
     """Mark a module-level coroutine as a message sink.
 
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The sink modules under
-    ottobot.sinks use this; load_sinks() later collects the
-    marked handlers via module_sinks() and registers them on the bot.
+    The sink modules under ottobot.sinks use this; load_sinks() later
+    registers the marked handlers on the bot.
     """
-
-    def decorator(handler: CommandHandler) -> CommandHandler:
-        setattr(
-            handler,
-            _SINK_ATTR,
-            Sink(handler=handler),
-        )
-        return handler
-
-    return decorator
+    return _marking(lambda handler: Sink(handler=handler))
 
 
 def task(
@@ -128,104 +144,88 @@ def task(
 ) -> Callable[[TaskHandler], TaskHandler]:
     """Mark a module-level coroutine as a scheduled task handler.
 
-    This only attaches metadata to the function — no bot instance is
-    needed at import time. The task modules under ottobot.tasks use
-    this; load_tasks() later collects the marked handlers via
-    module_tasks() and registers them on the bot. interval is how often
-    the runner calls the handler; channel is the ottobot.channels constant
+    The task modules under ottobot.tasks use this; load_tasks() later
+    registers the marked handlers on the bot. interval is how often the
+    runner calls the handler; channel is the ottobot.channels constant
     the task's output is broadcast on.
     """
-
-    def decorator(handler: TaskHandler) -> TaskHandler:
-        setattr(
-            handler,
-            _TASK_ATTR,
-            ScheduledTask(
-                name=name,
-                handler=handler,
-                interval=interval,
-                channel=channel,
-                help=help,
-            ),
+    return _marking(
+        lambda handler: ScheduledTask(
+            name=name, handler=handler, interval=interval, channel=channel, help=help
         )
-        return handler
-
-    return decorator
+    )
 
 
 def on_start() -> Callable[[OnStartHandler], OnStartHandler]:
     """Mark a module-level coroutine to run once at boot.
 
-    Like @sink, this only attaches metadata at import time. The loaders
-    collect marked handlers via module_on_start() and register them on the
-    bot; Ottobot.setup() awaits them all before the first message, passing
-    the bot so the hook can read its config (e.g. db_path).
+    The loaders register marked handlers on the bot; Ottobot.setup()
+    awaits them all before the first message, passing the bot so the hook
+    can read its config (e.g. db_path).
     """
-
-    def decorator(handler: OnStartHandler) -> OnStartHandler:
-        setattr(handler, _ON_START_ATTR, OnStart(handler=handler))
-        return handler
-
-    return decorator
+    return _marking(lambda handler: OnStart(handler=handler))
 
 
-def module_commands(module: ModuleType) -> list[Command]:
-    """The @command-marked handlers defined in *module*, in definition order.
+def module_handlers(module: ModuleType) -> list[Marker]:
+    """All markers attached to handlers defined in *module*, in definition order.
 
     Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another command's handler can't register
-    it twice.
-    """
-    return [
-        cmd
-        for obj in vars(module).values()
-        if (cmd := getattr(obj, _COMMAND_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
-
-
-def module_sinks(module: ModuleType) -> list[Sink]:
-    """The @sink-marked handlers defined in *module*, in definition order.
-
-    Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another sink's handler can't register
-    it twice.
-    """
-    return [
-        cmd
-        for obj in vars(module).values()
-        if (cmd := getattr(obj, _SINK_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
-
-
-def module_tasks(module: ModuleType) -> list[ScheduledTask]:
-    """The @task-marked handlers defined in *module*, in definition order.
-
-    Handlers merely imported into the module (e.g. from a shared helper)
-    are excluded, so importing another task's handler can't register it
+    are excluded, so importing another module's handler can't register it
     twice.
     """
     return [
-        t
+        marker
         for obj in vars(module).values()
-        if (t := getattr(obj, _TASK_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
+        if getattr(obj, "__module__", None) == module.__name__
+        for marker in handler_markers(obj)
     ]
+
+
+def module_markers(module: ModuleType, kind: type[M]) -> list[M]:
+    """The *kind* markers attached to handlers defined in *module*."""
+    return [marker for marker in module_handlers(module) if isinstance(marker, kind)]
+
+
+def module_commands(module: ModuleType) -> list[Command]:
+    """The @command markers defined in *module*, in definition order."""
+    return module_markers(module, Command)
+
+
+def module_sinks(module: ModuleType) -> list[Sink]:
+    """The @sink markers defined in *module*, in definition order."""
+    return module_markers(module, Sink)
+
+
+def module_tasks(module: ModuleType) -> list[ScheduledTask]:
+    """The @task markers defined in *module*, in definition order."""
+    return module_markers(module, ScheduledTask)
 
 
 def module_on_start(module: ModuleType) -> list[OnStart]:
-    """The @on_start-marked handlers defined in *module*, in definition order.
+    """The @on_start markers defined in *module*, in definition order."""
+    return module_markers(module, OnStart)
 
-    Handlers merely imported into the module are excluded, mirroring
-    module_commands/module_sinks.
-    """
-    return [
-        hook
-        for obj in vars(module).values()
-        if (hook := getattr(obj, _ON_START_ATTR, None)) is not None
-        and getattr(obj, "__module__", None) == module.__name__
-    ]
+
+@dataclass
+class Registry(Generic[T]):
+    """Holds registered items in registration order."""
+
+    _items: list[T] = field(default_factory=list)
+
+    def register(self, item: T) -> None:
+        self._items.append(item)
+
+    def all(self) -> list[T]:
+        """All registered items, in registration order."""
+        return self._items
+
+
+class SinkRegistry(Registry[Sink]):
+    """Holds sinks."""
+
+
+class TaskRegistry(Registry[ScheduledTask]):
+    """Holds scheduled tasks."""
 
 
 @dataclass
@@ -250,31 +250,3 @@ class CommandRegistry:
     def all(self) -> list[Command]:
         """All registered commands, sorted by name (aliases excluded)."""
         return sorted(self._commands.values(), key=lambda c: c.name)
-
-
-@dataclass
-class SinkRegistry:
-    """Holds sinks."""
-
-    _sinks: list[Sink] = field(default_factory=list)
-
-    def register(self, sink: Sink) -> None:
-        self._sinks.append(sink)
-
-    def all(self) -> list[Sink]:
-        """All registered sinks."""
-        return self._sinks
-
-
-@dataclass
-class TaskRegistry:
-    """Holds scheduled tasks."""
-
-    _tasks: list[ScheduledTask] = field(default_factory=list)
-
-    def register(self, task: ScheduledTask) -> None:
-        self._tasks.append(task)
-
-    def all(self) -> list[ScheduledTask]:
-        """All registered tasks."""
-        return self._tasks
