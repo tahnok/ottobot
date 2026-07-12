@@ -30,6 +30,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # A bare Python image — no uv, no build tools — with just the venv copied in.
 FROM python:3.14-slim-bookworm
 
+# tzdata provides the zoneinfo database (/usr/share/zoneinfo) that the C
+# library reads when a TZ like `America/Toronto` is set, so log timestamps
+# can be in local time. Without it, named zones silently fall back to UTC.
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt/lists \
+    apt-get update && apt-get install -y --no-install-recommends tzdata
+
 # Run as an unprivileged user.
 RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
 

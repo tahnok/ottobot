@@ -82,6 +82,7 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       XDG_CACHE_HOME: "/tmp/.cache"
+      TZ: "America/Toronto"
 
     # Drop Linux capabilities. Serial access is granted by `devices:` plus
     # `group_add:`, not by capabilities.
