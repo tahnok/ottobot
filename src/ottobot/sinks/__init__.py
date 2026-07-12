@@ -19,7 +19,7 @@ import logging
 import pkgutil
 from types import ModuleType
 
-from ..bot import MeshBot
+from ..bot import OttoBot
 from ..registry import Sink, module_on_start, module_sinks
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def iter_module_names() -> list[str]:
     )
 
 
-def register_module(bot: MeshBot, module: ModuleType) -> list[Sink]:
+def register_module(bot: OttoBot, module: ModuleType) -> list[Sink]:
     """Register a sink module's @sink and @on_start handlers on *bot*.
 
     Returns the sinks that were registered (its @on_start hooks, if any, are
@@ -49,7 +49,7 @@ def register_module(bot: MeshBot, module: ModuleType) -> list[Sink]:
     return sinks
 
 
-def load_sinks(bot: MeshBot) -> list[str]:
+def load_sinks(bot: OttoBot) -> list[str]:
     """Import every sink module and register its @sink handlers.
 
     Returns the module names that were loaded. Fails fast: a module with

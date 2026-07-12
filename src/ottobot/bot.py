@@ -1,4 +1,4 @@
-"""The MeshBot core: command registration and message dispatch.
+"""The OttoBot core: command registration and message dispatch.
 
 This module is transport-agnostic. It knows nothing about radios or the
 meshcore library — it just maps incoming messages to command handlers.
@@ -30,12 +30,12 @@ from .context import Context, IncomingMessage, ReplyFunc
 logger = logging.getLogger(__name__)
 
 
-class MeshBot:
+class OttoBot:
     """A chatbot that responds to prefixed commands, e.g. "!ping".
 
     Register commands with the decorator::
 
-        bot = MeshBot(name="ottobot")
+        bot = OttoBot(name="ottobot")
 
         @bot.command("ping", help="Check that the bot is alive")
         async def ping(ctx):

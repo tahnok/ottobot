@@ -6,7 +6,7 @@ import pytest
 from meshcore import EventType
 from meshcore.events import Event
 
-from ottobot import Context, MeshBot, TaskContext
+from ottobot import Context, OttoBot, TaskContext
 from ottobot.channels import PUBLIC, ChannelConfig
 from ottobot.config import BotConfig
 from ottobot.radio import RADIO
@@ -135,8 +135,8 @@ class FakeMeshCore:
 
 
 @pytest.fixture
-def bot() -> MeshBot:
-    bot = MeshBot(name="ottobot")
+def bot() -> OttoBot:
+    bot = OttoBot(name="ottobot")
 
     @bot.command("ping")
     async def ping(ctx: Context) -> str:
@@ -164,7 +164,7 @@ def mc() -> FakeMeshCore:
 
 
 @pytest.fixture
-async def runner(bot: MeshBot, mc: FakeMeshCore) -> MeshCoreRunner:
+async def runner(bot: OttoBot, mc: FakeMeshCore) -> MeshCoreRunner:
     runner = MeshCoreRunner(bot, mc)
     await runner.start()
     return runner
@@ -187,7 +187,7 @@ class TestLifecycle:
 
     async def test_start_logs_device_channels_from_radio(
         self,
-        bot: MeshBot,
+        bot: OttoBot,
         mc: FakeMeshCore,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -202,7 +202,7 @@ class TestLifecycle:
 
     async def test_start_notes_when_no_channels_configured(
         self,
-        bot: MeshBot,
+        bot: OttoBot,
         mc: FakeMeshCore,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -355,9 +355,9 @@ class TestApplySettings:
         assert mc.commands.path_hash_modes == [1]
 
 
-def task_bot(*channels: ChannelConfig) -> MeshBot:
+def task_bot(*channels: ChannelConfig) -> OttoBot:
     """A bot whose config knows the given channels, for scheduled-task tests."""
-    return MeshBot(name="ottobot", config=BotConfig(channels=channels))
+    return OttoBot(name="ottobot", config=BotConfig(channels=channels))
 
 
 class TestScheduledTasks:
@@ -430,7 +430,7 @@ class TestScheduledTasks:
 
     async def test_task_sees_the_bot_config(self, mc: FakeMeshCore) -> None:
         config = BotConfig(discord_webhook_url="https://example.com/webhook")
-        bot = MeshBot(name="ottobot", config=config)
+        bot = OttoBot(name="ottobot", config=config)
         seen: list[str | None] = []
 
         @bot.task("watch", interval=timedelta(hours=1), channel=PUBLIC)
@@ -468,7 +468,7 @@ class TestScheduledTasks:
         assert any("boom" in r.message for r in caplog.records)
 
     async def test_stop_cancels_scheduled_tasks(
-        self, bot: MeshBot, mc: FakeMeshCore
+        self, bot: OttoBot, mc: FakeMeshCore
     ) -> None:
         calls = 0
 

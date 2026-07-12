@@ -1,4 +1,4 @@
-"""Bridges a MeshBot to a real MeshCore device via the meshcore library.
+"""Bridges an OttoBot to a real MeshCore device via the meshcore library.
 
 The runner subscribes to channel message events, normalizes them into
 IncomingMessage objects, and routes replies back through the device on the
@@ -15,7 +15,7 @@ from typing import Any, Protocol
 from meshcore import EventType, MeshCore
 from meshcore.events import Event, Subscription
 
-from .bot import MeshBot
+from .bot import OttoBot
 from .channels import PUBLIC, ChannelConfig, channel_for_index
 from .config import BotConfig
 from .radio import RADIO
@@ -166,9 +166,9 @@ async def connect(
 
 
 class MeshCoreRunner:
-    """Runs a MeshBot against a connected meshcore.MeshCore instance."""
+    """Runs an OttoBot against a connected meshcore.MeshCore instance."""
 
-    def __init__(self, bot: MeshBot, meshcore: MeshCoreLike) -> None:
+    def __init__(self, bot: OttoBot, meshcore: MeshCoreLike) -> None:
         self.bot = bot
         self.mc = meshcore
         self._subscriptions: list[Subscription] = []

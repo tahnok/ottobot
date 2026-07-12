@@ -1,18 +1,18 @@
 import pytest
 
 from helpers import ReplyRecorder, addressed
-from ottobot import MeshBot
+from ottobot import OttoBot
 from ottobot.commands import register_module, source
 
 
 @pytest.fixture
-def bot() -> MeshBot:
-    bot = MeshBot(name="ottobot")
+def bot() -> OttoBot:
+    bot = OttoBot(name="ottobot")
     register_module(bot, source)
     return bot
 
 
-async def test_source(bot: MeshBot, reply: ReplyRecorder) -> None:
+async def test_source(bot: OttoBot, reply: ReplyRecorder) -> None:
     await bot.dispatch(addressed("!source"), reply)
     assert reply.replies == [
         "my source code is available at "

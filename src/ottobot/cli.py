@@ -23,7 +23,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from .bot import MeshBot
+from .bot import OttoBot
 from .commands import load_commands
 from .config import BotConfig, load_config
 from .runner import MeshCoreRunner, apply_settings, connect
@@ -32,9 +32,9 @@ from .simulator import Simulator
 from .tasks import load_tasks
 
 
-def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> MeshBot:
-    """A MeshBot named *name* with every command in ottobot.commands loaded."""
-    bot = MeshBot(name=name, prefix=prefix, config=config)
+def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> OttoBot:
+    """A OttoBot named *name* with every command in ottobot.commands loaded."""
+    bot = OttoBot(name=name, prefix=prefix, config=config)
     load_commands(bot)
     load_sinks(bot)
     load_tasks(bot)

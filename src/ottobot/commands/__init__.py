@@ -19,7 +19,7 @@ import logging
 import pkgutil
 from types import ModuleType
 
-from ..bot import MeshBot
+from ..bot import OttoBot
 from ..registry import Command, module_commands
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def iter_command_module_names() -> list[str]:
     )
 
 
-def register_module(bot: MeshBot, module: ModuleType) -> list[Command]:
+def register_module(bot: OttoBot, module: ModuleType) -> list[Command]:
     """Register every @command-marked handler in *module* on *bot*.
 
     Returns the commands that were registered. Tests use this to load a
@@ -46,7 +46,7 @@ def register_module(bot: MeshBot, module: ModuleType) -> list[Command]:
     return commands
 
 
-def load_commands(bot: MeshBot) -> list[str]:
+def load_commands(bot: OttoBot) -> list[str]:
     """Import every command module and register its @command handlers.
 
     Returns the module names that were loaded. Fails fast: a module with

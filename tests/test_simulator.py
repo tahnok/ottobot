@@ -2,14 +2,14 @@ from datetime import timedelta
 
 import pytest
 
-from ottobot import Context, MeshBot, TaskContext
+from ottobot import Context, OttoBot, TaskContext
 from ottobot.channels import PUBLIC
 from ottobot.cli import parse_args
 from ottobot.simulator import Simulator
 
 
 @pytest.fixture
-def sim(bot: MeshBot) -> Simulator:
+def sim(bot: OttoBot) -> Simulator:
     @bot.command("ping")
     async def ping(ctx: Context) -> str:
         return f"pong ({ctx.path_description})"

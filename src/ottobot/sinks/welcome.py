@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ottobot import Context, MeshBot, on_start, sink
+from ottobot import Context, OttoBot, on_start, sink
 from ottobot.channels import PUBLIC
 
 # under 140 chars plz
@@ -59,7 +59,7 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
 
 
 @on_start()
-async def setup(bot: MeshBot) -> None:
+async def setup(bot: OttoBot) -> None:
     if not bot.config.database:
         return
     await asyncio.to_thread(_init_db, bot.config.database)
