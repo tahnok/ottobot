@@ -82,9 +82,6 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"
       XDG_CACHE_HOME: "/tmp/.cache"
-      # Timezone for log timestamps. Set to any IANA zone name to see logs in
-      # local time (the image ships the tzdata database, so any zone resolves);
-      # use Etc/UTC for Zulu.
       TZ: "America/Toronto"
 
     # Drop Linux capabilities. Serial access is granted by `devices:` plus
