@@ -139,7 +139,7 @@ class TestTaskControl:
     async def test_raising_task_reports_instead_of_crashing(
         self, sim: Simulator
     ) -> None:
-        @sim.bot.task("boom", interval=timedelta(hours=1), channel="public")
+        @sim.bot.task("boom", interval=timedelta(hours=1), channel=PUBLIC)
         async def boom(ctx: TaskContext) -> None:
             raise RuntimeError("kaboom")
 
