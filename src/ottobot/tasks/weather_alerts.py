@@ -15,6 +15,12 @@ Environment Canada only bumping the timestamp when the battleboard
 actually changes. If the all-clear ever starts repeating, dedupe it by
 title instead of id (announce it only when the previous announcement
 wasn't already an all-clear).
+
+To be nice to Environment Canada's servers, fetches are conditional: the
+ETag/Last-Modified validators from the last successful fetch are sent back
+as If-None-Match/If-Modified-Since, so an unchanged feed costs a single
+304 with no body. The validators live in memory only (no disk writes); a
+restart just means one unconditional fetch to re-prime them.
 """
 
 from __future__ import annotations
@@ -42,6 +48,24 @@ _TITLE_SUFFIX = ", Ottawa North - Kanata - Orléans"
 _seen: set[str] = set()
 _primed = False
 
+# Cache validators from the last successfully parsed fetch, kept in memory
+# only. Either may be None if the server didn't send it.
+_etag: str | None = None
+_last_modified: str | None = None
+
+
+def normalize_etag(etag: str) -> str:
+    """Strip Apache mod_deflate's "-gzip" ETag suffix.
+
+    Apache tags compressed responses with `W/"...-gzip"` but only matches
+    If-None-Match against the uncompressed form, so sending the suffixed
+    value back gets a full 200 every time. The stripped form matches
+    (verified against weather.gc.ca).
+    """
+    if etag.endswith('-gzip"'):
+        return etag[: -len('-gzip"')] + '"'
+    return etag
+
 
 def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
     """Return (id, title) for each <entry> in the alerts feed, document order."""
@@ -67,12 +91,24 @@ def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
     help="Announce new Environment Canada weather alerts for Ottawa",
 )
 async def weather_alerts(ctx: TaskContext) -> None:
-    global _primed
+    global _primed, _etag, _last_modified
+    headers = {}
+    if _etag is not None:
+        headers["If-None-Match"] = _etag
+    if _last_modified is not None:
+        headers["If-Modified-Since"] = _last_modified
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(ALERTS_URL)
+            response = await client.get(ALERTS_URL, headers=headers)
+            if response.status_code == 304:
+                return
             response.raise_for_status()
         alerts = parse_alerts(response.text)
+        # Only keep validators for a feed we actually parsed, so a bad
+        # document can't get stuck behind 304s.
+        etag = response.headers.get("ETag")
+        _etag = normalize_etag(etag) if etag is not None else None
+        _last_modified = response.headers.get("Last-Modified")
     except Exception:
         logger.warning("failed to fetch Environment Canada alerts", exc_info=True)
         return
