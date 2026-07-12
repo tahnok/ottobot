@@ -11,37 +11,32 @@ from .config import BotConfig
 
 @dataclass(frozen=True)
 class IncomingMessage:
-    """A message received from the mesh, normalized away from transport details.
+    """A channel message received from the mesh, normalized away from transport.
 
-    channel_idx is None for direct messages and the channel number for
-    channel/group messages. sender_key is the sender's public key prefix
-    (hex) for direct messages; channel messages may not carry one.
+    channel_idx is the device channel slot the message arrived on. The
+    sender's name is recovered from the spoofable "Name: message" text
+    convention (see the runner), so it is advisory only.
 
     path_len is the raw value reported by the device: 255 means the message
     arrived directly (zero hops), otherwise it is the number of repeater
     hops. path, when known, is a hex string of repeater node hashes,
     outermost repeater first. path_hash_mode sets the hash width: mode N
     means N+1 bytes per hop (mode 0 = legacy 1-byte hashes, mode 2 =
-    3-byte hashes); -1 is reported for direct messages.
+    3-byte hashes).
 
     raw is the unmodified event payload from the transport — for meshcore,
-    the *_MSG_RECV payload dict (SNR, sender_timestamp, txt_type, ...).
+    the CHANNEL_MSG_RECV payload dict (SNR, sender_timestamp, txt_type, ...).
     It is an escape hatch for transport data the framework doesn't model;
     None when the message was built without a transport (e.g. in tests).
     """
 
     text: str
-    sender_key: str | None = None
     sender_name: str | None = None
-    channel_idx: int | None = None
+    channel_idx: int = 0
     path_len: int | None = None
     path: str | None = None
     path_hash_mode: int | None = None
     raw: dict[str, Any] | None = None
-
-    @property
-    def is_dm(self) -> bool:
-        return self.channel_idx is None
 
     @property
     def hop_count(self) -> int | None:
@@ -91,10 +86,6 @@ class Context:
     config: BotConfig = field(default_factory=BotConfig)
 
     @property
-    def is_dm(self) -> bool:
-        return self.message.is_dm
-
-    @property
     def sender_name(self) -> str | None:
         return self.message.sender_name
 
@@ -108,7 +99,7 @@ class Context:
         return self.message.raw
 
     async def reply(self, text: str) -> None:
-        """Send text back where the message came from (DM or channel)."""
+        """Send text back on the channel the message came from."""
         await self._reply(text)
 
 

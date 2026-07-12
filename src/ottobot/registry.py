@@ -28,10 +28,9 @@ class Command:
     """A named command and the coroutine that handles it.
 
     requires_address controls whether the bot must be addressed by name
-    for this command to run in a *channel* (e.g. "ottobot !ping"). It has
-    no effect on direct messages, which are always addressed to the bot.
-    Set it False for commands that should answer any channel message
-    carrying the prefix, without the name.
+    for this command to run (e.g. "ottobot !ping"). Set it False for
+    commands that should answer any channel message carrying the prefix,
+    without the name.
     """
 
     name: str

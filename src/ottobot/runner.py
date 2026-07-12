@@ -1,9 +1,8 @@
 """Bridges a MeshBot to a real MeshCore device via the meshcore library.
 
-The runner subscribes to direct and channel message events, normalizes
-them into IncomingMessage objects, and routes replies back through the
-device (DM replies to the sending contact, channel replies to the same
-channel).
+The runner subscribes to channel message events, normalizes them into
+IncomingMessage objects, and routes replies back through the device on the
+same channel.
 """
 
 from __future__ import annotations
@@ -54,7 +53,6 @@ class _Commands(Protocol):
     ) -> Event: ...
     async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> Event: ...
     async def set_path_hash_mode(self, mode: int) -> Event: ...
-    async def send_msg(self, contact: dict[str, Any], text: str) -> Event: ...
     async def send_chan_msg(self, channel_idx: int, text: str) -> Event: ...
 
 
@@ -78,7 +76,6 @@ class MeshCoreLike(Protocol):
     def unsubscribe(self, subscription: Any) -> None: ...
     def set_decrypt_channel_logs(self, v: bool) -> None: ...
     async def ensure_contacts(self) -> bool: ...
-    def get_contact_by_key_prefix(self, prefix: str) -> dict[str, Any] | None: ...
     async def start_auto_message_fetching(self) -> Any: ...
     async def stop_auto_message_fetching(self) -> Any: ...
 
@@ -186,7 +183,6 @@ class MeshCoreRunner:
         # forwards raw packet logs.
         self.mc.set_decrypt_channel_logs(True)
         self._subscriptions = [
-            self.mc.subscribe(EventType.CONTACT_MSG_RECV, self._on_contact_msg),
             self.mc.subscribe(EventType.CHANNEL_MSG_RECV, self._on_channel_msg),
         ]
         # Without this, incoming messages stay queued on the device and
@@ -271,41 +267,6 @@ class MeshCoreRunner:
         finally:
             await self.stop()
 
-    async def _on_contact_msg(self, event: Event) -> None:
-        payload = event.payload
-        prefix = payload.get("pubkey_prefix")
-        contact = await self._resolve_contact(prefix)
-        if contact is None:
-            logger.warning("DM from unknown contact %r, cannot reply; ignoring", prefix)
-            return
-        message = IncomingMessage(
-            text=payload.get("text", ""),
-            sender_key=prefix,
-            sender_name=contact.get("adv_name"),
-            path_len=payload.get("path_len"),
-            path=payload.get("path"),
-            path_hash_mode=payload.get("path_hash_mode"),
-            raw=payload,
-        )
-
-        logger.info(
-            "DM from %s (%s) [%s]: %r",
-            contact.get("adv_name"),
-            prefix,
-            message.path_description,
-            message.text,
-        )
-
-        async def reply(text: str) -> None:
-            logger.info(
-                "DM reply to %s (%s): %r", contact.get("adv_name"), prefix, text
-            )
-            result = await self.mc.commands.send_msg(contact, text)
-            if result.type == EventType.ERROR:
-                logger.error("failed to send DM reply: %r", result.payload)
-
-        await self.bot.dispatch(message, reply)
-
     async def _on_channel_msg(self, event: Event) -> None:
         payload = event.payload
         channel_idx = payload.get("channel_idx", 0)
@@ -347,13 +308,3 @@ class MeshCoreRunner:
                 logger.error("failed to send channel reply: %r", result.payload)
 
         await self.bot.dispatch(message, reply)
-
-    async def _resolve_contact(self, prefix: str | None) -> dict[str, Any] | None:
-        if not prefix:
-            return None
-        contact: dict[str, Any] | None = self.mc.get_contact_by_key_prefix(prefix)
-        if contact is None:
-            # Maybe a contact added since startup; refresh the list once.
-            await self.mc.ensure_contacts()
-            contact = self.mc.get_contact_by_key_prefix(prefix)
-        return contact

@@ -2,7 +2,7 @@
 
 import pytest
 
-from helpers import ReplyRecorder, channel_msg, dm
+from helpers import ReplyRecorder, channel_msg
 from ottobot import MeshBot
 from ottobot.config import BotConfig
 from ottobot.sinks import discord as discord_mod
@@ -46,14 +46,6 @@ async def test_command_messages_are_also_posted(
     bot = make_bot(BotConfig(discord_webhook_url=WEBHOOK))
     await bot.dispatch(channel_msg("!ping"), reply)
     assert posts == [(WEBHOOK, {"username": "alice", "content": "[public] !ping"})]
-
-
-async def test_dm_is_not_posted(
-    posts: list[tuple[str, dict]], reply: ReplyRecorder
-) -> None:
-    bot = make_bot(BotConfig(discord_webhook_url=WEBHOOK))
-    await bot.dispatch(dm("psst"), reply)
-    assert posts == []
 
 
 async def test_non_public_channel_is_not_posted(

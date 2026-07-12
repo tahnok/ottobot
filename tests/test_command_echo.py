@@ -1,6 +1,6 @@
 import pytest
 
-from helpers import ReplyRecorder, dm
+from helpers import ReplyRecorder, addressed
 from ottobot import MeshBot
 from ottobot.commands import echo, register_module
 
@@ -13,10 +13,10 @@ def bot() -> MeshBot:
 
 
 async def test_echo_repeats_args(bot: MeshBot, reply: ReplyRecorder) -> None:
-    await bot.dispatch(dm("!echo hello world"), reply)
+    await bot.dispatch(addressed("!echo hello world"), reply)
     assert reply.replies == ["hello world"]
 
 
 async def test_echo_without_args(bot: MeshBot, reply: ReplyRecorder) -> None:
-    await bot.dispatch(dm("!echo"), reply)
+    await bot.dispatch(addressed("!echo"), reply)
     assert reply.replies == ["(nothing to echo)"]

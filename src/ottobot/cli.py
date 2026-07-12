@@ -4,7 +4,7 @@
     ottobot --ble AA:BB:CC:DD:EE:FF
     ottobot --tcp 192.168.1.50:5000
 
-Then message the node "!help" (in a DM or on channel 0) to see commands.
+Then message the node "@[ottobot] !help" on a channel to see commands.
 
 Pass --config ottobot.toml to make a TOML file the source of truth for the
 bot's name and key pair; those settings are pushed onto the device on startup.

@@ -50,15 +50,12 @@ class MeshBot:
         self,
         name: str,
         prefix: str = "!",
-        respond_in_channels: bool = True,  # TODO: remove this
         config: BotConfig | None = None,
     ) -> None:
         self.prefix = prefix
-        # The bot's own name on the mesh. In channels, commands that
-        # require addressing only run when the message addresses this name
-        # (e.g. "@[ottobot] !ping").
+        # The bot's own name on the mesh. Commands that require addressing
+        # only run when the message addresses this name (e.g. "@[ottobot] !ping").
         self.name = name
-        self.respond_in_channels = respond_in_channels
         # The loaded TOML config, surfaced to handlers via Context.config.
         self.config = config or BotConfig()
         self.registry = CommandRegistry()
@@ -187,8 +184,6 @@ class MeshBot:
             if result is not None:
                 await reply(result)
 
-        if not message.is_dm and not self.respond_in_channels:
-            return
         text, addressed = self.strip_address(message.text)
         parsed = self.parse(text)
         if parsed is None:
@@ -198,9 +193,8 @@ class MeshBot:
         if command is None:
             logger.debug("ignoring unknown command %r", name)
             return
-        # On a shared channel, only answer when addressed by name (unless
-        # the command opts out). DMs are always addressed to the bot.
-        if not message.is_dm and command.requires_address and not addressed:
+        # Only answer when addressed by name, unless the command opts out.
+        if command.requires_address and not addressed:
             logger.debug(
                 "ignoring channel %r: bot %r not addressed by name",
                 command.name,

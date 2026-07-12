@@ -5,9 +5,9 @@ Guidance for AI assistants (Claude Code) working in this repository.
 ## What this is
 
 Ottobot is a chatbot for Ottawa's MeshCore mesh radio network. It connects
-to a MeshCore companion device (serial/BLE/TCP), listens for DMs and
-channel messages, and responds to `!`-prefixed commands. Commands are
-community-contributed, one file each, auto-discovered — there is no
+to a MeshCore companion device (serial/BLE/TCP), listens for channel
+messages, and responds to `!`-prefixed commands when addressed by name.
+Commands are community-contributed, one file each, auto-discovered — there is no
 central registry to edit.
 
 ## Requirements & setup
@@ -57,7 +57,7 @@ together as the `ottobot` entry point.
   taking `ctx: Context` and returning `str | None`. Add a matching
   `tests/test_command_<name>.py` (copy `test_command_ping.py` for shape —
   it registers just that module against a fresh `MeshBot(name=...)` and dispatches
-  test messages via `tests/helpers.py`'s `dm()`/`channel_msg()`/
+  test messages via `tests/helpers.py`'s `addressed()`/`channel_msg()`/
   `ReplyRecorder`). Try it interactively with `uv run ottobot --simulate`.
 - **Adding a scheduled task**: create `src/ottobot/tasks/<name>.py` with a
   top-level `@task("name", interval=timedelta(...), channel=OTT_ALERTS,
@@ -73,9 +73,9 @@ together as the `ottobot` entry point.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.
-- **Don't trust `ctx.sender_name` on channel messages** — it's recovered
-  from a spoofable `"Name: message"` text convention, never use it for
-  authorization. DMs are identified by a real (resolved) sender key.
+- **Don't trust `ctx.sender_name`** — every message is a channel message,
+  and the name is recovered from a spoofable `"Name: message"` text
+  convention, so never use it for authorization.
 - **Handlers must not block** — they run in the bot's single event loop. No
   blocking I/O or long computation; use `asyncio`-friendly APIs.
 - **Keep replies short** — mesh bandwidth is limited; aim for a single
@@ -90,5 +90,6 @@ together as the `ottobot` entry point.
 
 Tests run against a fake in-memory bot/device — no hardware needed.
 `tests/conftest.py` provides `bot`/`reply` fixtures; `tests/helpers.py`
-provides `dm()`, `channel_msg()`, and `ReplyRecorder`. `pytest-asyncio` is
-in `auto` mode, so async tests need no extra decorators.
+provides `channel_msg()`, `addressed()` (a channel message that mentions
+the bot so commands run), and `ReplyRecorder`. `pytest-asyncio` is in
+`auto` mode, so async tests need no extra decorators.

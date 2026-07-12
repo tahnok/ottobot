@@ -16,8 +16,7 @@ def sim(bot: MeshBot) -> Simulator:
 
     @bot.command("whoami")
     async def whoami(ctx: Context) -> str:
-        where = "dm" if ctx.is_dm else f"channel {ctx.message.channel_idx}"
-        return f"{ctx.sender_name} via {where}"
+        return f"{ctx.sender_name} via channel {ctx.message.channel_idx}"
 
     return Simulator(bot)
 
@@ -46,26 +45,17 @@ class TestMessages:
 
     async def test_defaults_to_channel_zero(self, sim: Simulator) -> None:
         message = sim.build_message("!ping")
-        assert not message.is_dm
         assert message.channel_idx == 0
-        assert message.sender_key is None
 
 
 class TestControls:
     async def test_channel_switch_reaches_handler(self, sim: Simulator) -> None:
         await sim.handle_line("/channel 2")
         assert await sim.handle_line("@[ottobot] !whoami") == ["bot> you via channel 2"]
-        # Channel messages don't carry a sender key on the real mesh.
-        assert sim.build_message("x").sender_key is None
 
     async def test_channel_defaults_to_zero(self, sim: Simulator) -> None:
         await sim.handle_line("/channel")
         assert sim.channel_idx == 0
-
-    async def test_dm_switch_carries_sender_key(self, sim: Simulator) -> None:
-        await sim.handle_line("/dm")
-        assert await sim.handle_line("!whoami") == ["bot> you via dm"]
-        assert sim.build_message("x").sender_key is not None
 
     async def test_name_changes_sender(self, sim: Simulator) -> None:
         await sim.handle_line("/name alice")
@@ -109,8 +99,8 @@ class TestControls:
     async def test_prompt_tracks_persona(self, sim: Simulator) -> None:
         assert sim.prompt == "you@ch0> "
         await sim.handle_line("/name alice")
-        await sim.handle_line("/dm")
-        assert sim.prompt == "alice@dm> "
+        await sim.handle_line("/channel 2")
+        assert sim.prompt == "alice@ch2> "
 
 
 class TestTaskControl:
