@@ -15,6 +15,16 @@ central registry to edit.
 - Python 3.13+ (see `.python-version`)
 - Dependency/task runner: [`uv`](https://docs.astral.sh/uv/)
 
+> **Note for cloud container environments (e.g. Claude Code on the web):**
+> `uv` normally auto-downloads the pinned Python, but in a sandboxed cloud
+> container Python 3.14 will *not* auto-download (no network access to the
+> Python build server). Use the pre-installed 3.13 instead — e.g.
+> `uv sync --python 3.13` / `uv run --python 3.13 ...`. You can tell you're
+> in such an environment by signs like an `HTTPS_PROXY` being set, the repo
+> living under `/home/user/`, or `uv python install 3.14` failing to fetch;
+> when in doubt, check whether `python3.14` is already on `PATH` before
+> relying on an auto-download.
+
 ```bash
 uv sync               # install deps (including dev group)
 uv run black .        # auto-format the code (black)
