@@ -1,33 +1,33 @@
 import pytest
 
 from helpers import ReplyRecorder, addressed, channel_msg
-from ottobot import Command, Context, MeshBot
+from ottobot import Command, Context, Ottobot
 
 
 class TestParse:
-    def test_command_with_args(self, bot: MeshBot) -> None:
+    def test_command_with_args(self, bot: Ottobot) -> None:
         assert bot.parse("!echo hello world") == ("echo", "hello world")
 
-    def test_command_without_args(self, bot: MeshBot) -> None:
+    def test_command_without_args(self, bot: Ottobot) -> None:
         assert bot.parse("!ping") == ("ping", "")
 
-    def test_surrounding_whitespace(self, bot: MeshBot) -> None:
+    def test_surrounding_whitespace(self, bot: Ottobot) -> None:
         assert bot.parse("  !ping  ") == ("ping", "")
 
-    def test_non_command_text(self, bot: MeshBot) -> None:
+    def test_non_command_text(self, bot: Ottobot) -> None:
         assert bot.parse("hello there") is None
 
-    def test_bare_prefix(self, bot: MeshBot) -> None:
+    def test_bare_prefix(self, bot: Ottobot) -> None:
         assert bot.parse("!") is None
 
     def test_custom_prefix(self) -> None:
-        bot = MeshBot(name="ottobot", prefix="/")
+        bot = Ottobot(name="ottobot", prefix="/")
         assert bot.parse("/ping") == ("ping", "")
         assert bot.parse("!ping") is None
 
 
 class TestRegistration:
-    def test_decorator_registers_command(self, bot: MeshBot) -> None:
+    def test_decorator_registers_command(self, bot: Ottobot) -> None:
         @bot.command("ping", help="pong back")
         async def ping(ctx: Context) -> str:
             return "pong"
@@ -36,21 +36,21 @@ class TestRegistration:
         assert command is not None
         assert command.help == "pong back"
 
-    def test_aliases_resolve_to_same_command(self, bot: MeshBot) -> None:
+    def test_aliases_resolve_to_same_command(self, bot: Ottobot) -> None:
         @bot.command("weather", aliases=("wx",))
         async def weather(ctx: Context) -> str:
             return "sunny"
 
         assert bot.registry.get("wx") is bot.registry.get("weather")
 
-    def test_lookup_is_case_insensitive(self, bot: MeshBot) -> None:
+    def test_lookup_is_case_insensitive(self, bot: Ottobot) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
             return "pong"
 
         assert bot.registry.get("PING") is not None
 
-    def test_duplicate_name_rejected(self, bot: MeshBot) -> None:
+    def test_duplicate_name_rejected(self, bot: Ottobot) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
             return "pong"
@@ -61,7 +61,7 @@ class TestRegistration:
             async def ping2(ctx: Context) -> str:
                 return "pong2"
 
-    def test_alias_colliding_with_existing_name_rejected(self, bot: MeshBot) -> None:
+    def test_alias_colliding_with_existing_name_rejected(self, bot: Ottobot) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
             return "pong"
@@ -72,7 +72,7 @@ class TestRegistration:
 
 class TestDispatch:
     async def test_returned_string_is_sent_as_reply(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
@@ -82,7 +82,7 @@ class TestDispatch:
         assert reply.replies == ["pong"]
 
     async def test_handler_can_reply_directly(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("multi")
         async def multi(ctx: Context) -> None:
@@ -93,7 +93,7 @@ class TestDispatch:
         assert reply.replies == ["one", "two"]
 
     async def test_args_are_passed_to_handler(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("echo")
         async def echo(ctx: Context) -> str:
@@ -103,19 +103,19 @@ class TestDispatch:
         assert reply.replies == ["hello world"]
 
     async def test_non_command_text_is_ignored(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         await bot.dispatch(channel_msg("just chatting"), reply)
         assert reply.replies == []
 
     async def test_unknown_command_is_ignored(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         await bot.dispatch(addressed("!nosuchthing"), reply)
         assert reply.replies == []
 
     async def test_handler_returning_none_sends_nothing(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("quiet")
         async def quiet(ctx: Context) -> None:
@@ -125,7 +125,7 @@ class TestDispatch:
         assert reply.replies == []
 
     async def test_handler_exception_is_caught_and_reported(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("boom")
         async def boom(ctx: Context) -> str:
@@ -135,7 +135,7 @@ class TestDispatch:
         assert reply.replies == ["Sorry, !boom hit an error."]
 
     async def test_channel_messages_handled_when_addressed(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
@@ -145,8 +145,8 @@ class TestDispatch:
         assert reply.replies == ["pong"]
 
 
-def _named_bot() -> MeshBot:
-    bot = MeshBot(name="ottobot")
+def _named_bot() -> Ottobot:
+    bot = Ottobot(name="ottobot")
 
     @bot.command("ping")
     async def ping(ctx: Context) -> str:
@@ -162,26 +162,26 @@ def _named_bot() -> MeshBot:
 class TestAddressing:
     def test_strip_address_app_mention_form(self) -> None:
         # The MeshCore app inserts mentions as "@[Name]".
-        bot = MeshBot(name="ottobot")
+        bot = Ottobot(name="ottobot")
         assert bot.strip_address("@[ottobot] !ping") == ("!ping", True)
         assert bot.strip_address("@[ottobot]!ping") == ("!ping", True)
-        assert bot.strip_address("@[OttoBot] !ping") == ("!ping", True)
+        assert bot.strip_address("@[Ottobot] !ping") == ("!ping", True)
 
     def test_strip_address_with_separators(self) -> None:
-        bot = MeshBot(name="ottobot")
+        bot = Ottobot(name="ottobot")
         assert bot.strip_address("ottobot !ping") == ("!ping", True)
         assert bot.strip_address("ottobot: !ping") == ("!ping", True)
         assert bot.strip_address("ottobot, !ping") == ("!ping", True)
-        assert bot.strip_address("OttoBot !ping") == ("!ping", True)
+        assert bot.strip_address("Ottobot !ping") == ("!ping", True)
         assert bot.strip_address("@ottobot !ping") == ("!ping", True)
 
     def test_strip_address_requires_name_to_stand_alone(self) -> None:
-        bot = MeshBot(name="ottobot")
+        bot = Ottobot(name="ottobot")
         # "ottobotanist" must not be read as addressing "ottobot".
         assert bot.strip_address("ottobotanist !ping") == ("ottobotanist !ping", False)
 
     def test_strip_address_when_not_addressed(self) -> None:
-        bot = MeshBot(name="ottobot")
+        bot = Ottobot(name="ottobot")
         assert bot.strip_address("!ping") == ("!ping", False)
 
     async def test_channel_requires_name(self, reply: ReplyRecorder) -> None:
@@ -207,7 +207,7 @@ class TestAddressing:
         assert reply.replies == ["ok"]
 
     async def test_context_exposes_sender(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         seen: dict[str, object] = {}
 
@@ -221,7 +221,7 @@ class TestAddressing:
 
 class TestHelp:
     async def test_help_lists_commands_with_descriptions(
-        self, bot: MeshBot, reply: ReplyRecorder
+        self, bot: Ottobot, reply: ReplyRecorder
     ) -> None:
         @bot.command("ping", help="Check liveness")
         async def ping(ctx: Context) -> str:

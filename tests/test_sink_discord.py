@@ -3,7 +3,7 @@
 import pytest
 
 from helpers import ReplyRecorder, channel_msg
-from ottobot import MeshBot
+from ottobot import Ottobot
 from ottobot.config import BotConfig
 from ottobot.sinks import discord as discord_mod
 from ottobot.sinks import register_module
@@ -11,9 +11,9 @@ from ottobot.sinks import register_module
 WEBHOOK = "https://discord.com/api/webhooks/1/abc"
 
 
-def make_bot(config: BotConfig) -> MeshBot:
+def make_bot(config: BotConfig) -> Ottobot:
     """A bot with only the discord sink loaded."""
-    bot = MeshBot(name="ottobot", config=config)
+    bot = Ottobot(name="ottobot", config=config)
     register_module(bot, discord_mod)
     return bot
 

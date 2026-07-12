@@ -9,18 +9,18 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .bot import MeshBot
+    from .bot import Ottobot
     from .channels import ChannelConfig
     from .context import Context, TaskContext
 
 CommandHandler = Callable[["Context"], Awaitable[str | None]]
 TaskHandler = Callable[["TaskContext"], Awaitable[str | None]]
-OnStartHandler = Callable[["MeshBot"], Awaitable[None]]
+OnStartHandler = Callable[["Ottobot"], Awaitable[None]]
 
-_COMMAND_ATTR = "_meshbot_command"
-_SINK_ATTR = "_meshbot_sink"
-_TASK_ATTR = "_meshbot_task"
-_ON_START_ATTR = "_meshbot_on_start"
+_COMMAND_ATTR = "_ottobot_command"
+_SINK_ATTR = "_ottobot_sink"
+_TASK_ATTR = "_ottobot_task"
+_ON_START_ATTR = "_ottobot_on_start"
 
 
 @dataclass
@@ -158,7 +158,7 @@ def on_start() -> Callable[[OnStartHandler], OnStartHandler]:
 
     Like @sink, this only attaches metadata at import time. The loaders
     collect marked handlers via module_on_start() and register them on the
-    bot; MeshBot.setup() awaits them all before the first message, passing
+    bot; Ottobot.setup() awaits them all before the first message, passing
     the bot so the hook can read its config (e.g. db_path).
     """
 

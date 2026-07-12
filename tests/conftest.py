@@ -1,12 +1,12 @@
 import pytest
 
 from helpers import ReplyRecorder
-from ottobot import MeshBot
+from ottobot import Ottobot
 
 
 @pytest.fixture
-def bot() -> MeshBot:
-    return MeshBot(name="ottobot")
+def bot() -> Ottobot:
+    return Ottobot(name="ottobot")
 
 
 @pytest.fixture

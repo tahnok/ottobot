@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from ottobot import MeshBot
+from ottobot import Ottobot
 from ottobot.cli import build_bot
 from ottobot.commands import iter_command_module_names, load_commands
 from ottobot.registry import module_commands
@@ -20,7 +20,7 @@ def test_every_command_module_defines_a_command() -> None:
 
 
 def test_load_commands_loads_all_modules() -> None:
-    loaded = load_commands(MeshBot(name="ottobot"))
+    loaded = load_commands(Ottobot(name="ottobot"))
     assert loaded == iter_command_module_names()
     assert {"ping", "echo", "roll"} <= set(loaded)
 
@@ -28,7 +28,7 @@ def test_load_commands_loads_all_modules() -> None:
 def test_no_name_collisions_across_command_files() -> None:
     # CommandRegistry raises ValueError on duplicates; a clean load proves
     # no two files claim the same command name or alias.
-    load_commands(MeshBot(name="ottobot"))
+    load_commands(Ottobot(name="ottobot"))
 
 
 def test_build_bot_exposes_all_commands() -> None:
@@ -47,7 +47,7 @@ def test_module_without_commands_is_rejected(
         commands_pkg.importlib, "import_module", lambda name: types.ModuleType(name)
     )
     with pytest.raises(TypeError, match="must define at least one @command"):
-        load_commands(MeshBot(name="ottobot"))
+        load_commands(Ottobot(name="ottobot"))
 
 
 def test_imported_handlers_are_not_re_registered() -> None:

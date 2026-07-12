@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import asyncio
 
-from .bot import MeshBot
+from .bot import Ottobot
 from .context import IncomingMessage, TaskContext
 
 BANNER = (
@@ -42,7 +42,7 @@ CONTROL_HELP = [
 
 
 class Simulator:
-    """Feeds typed lines into a MeshBot as if they arrived from the mesh.
+    """Feeds typed lines into an Ottobot as if they arrived from the mesh.
 
     Keeps a mutable "persona" (sender name, channel, simulated route) used
     to build each IncomingMessage. handle_line() is the testable core: it
@@ -50,7 +50,7 @@ class Simulator:
     wraps it in a stdin/stdout loop.
     """
 
-    def __init__(self, bot: MeshBot) -> None:
+    def __init__(self, bot: Ottobot) -> None:
         self.bot = bot
         self.sender_name = "you"
         self.channel_idx = 0  # start on channel 0, like the mesh default

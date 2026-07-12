@@ -1,6 +1,6 @@
 """An Ottawa mesh bot for MeshCore networks, with pluggable commands."""
 
-from .bot import MeshBot
+from .bot import Ottobot
 from .registry import (
     Command,
     CommandRegistry,
@@ -16,7 +16,7 @@ from .registry import (
 from .context import Context, IncomingMessage, TaskContext
 
 __all__ = [
-    "MeshBot",
+    "Ottobot",
     "Command",
     "CommandRegistry",
     "Context",

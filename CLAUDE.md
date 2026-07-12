@@ -56,7 +56,7 @@ together as the `ottobot` entry point.
   top-level `@command("name", help="...", aliases=(...))` async handler
   taking `ctx: Context` and returning `str | None`. Add a matching
   `tests/test_command_<name>.py` (copy `test_command_ping.py` for shape —
-  it registers just that module against a fresh `MeshBot(name=...)` and dispatches
+  it registers just that module against a fresh `Ottobot(name=...)` and dispatches
   test messages via `tests/helpers.py`'s `addressed()`/`channel_msg()`/
   `ReplyRecorder`). Try it interactively with `uv run ottobot --simulate`.
 - **Adding a scheduled task**: create `src/ottobot/tasks/<name>.py` with a
