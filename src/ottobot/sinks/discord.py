@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 async def post_to_discord(url: str, payload: dict[str, Any]) -> None:
     """POST *payload* as JSON to the Discord webhook at *url*."""
     async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(url, json=payload)
+        response = await client.post(url, json=payload)
+        # Surface rejected posts (e.g. a deleted webhook's 404) to the
+        # caller, which logs them; httpx doesn't raise on 4xx/5xx itself.
+        response.raise_for_status()
 
 
 @sink()

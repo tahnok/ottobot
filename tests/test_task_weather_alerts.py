@@ -174,6 +174,20 @@ class TestWeatherAlertsTask:
         assert replies == []
         assert alerts_mod._primed is False
 
+    async def test_seen_ids_are_pruned_when_alerts_leave_the_feed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # _seen must track the live feed, not grow forever on a
+        # long-running bot: once an alert's entry is gone, its id goes too.
+        fake_httpx_client(monkeypatch, text=FEED)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        fake_httpx_client(monkeypatch, text=FIXTURE_FEED)  # only the all-clear
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == ["No alerts in effect"]
+        assert alerts_mod._seen == {"tag:weather.gc.ca,2013-04-16:20260704092826"}
+
     async def test_no_active_alerts_primes_to_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

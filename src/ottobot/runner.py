@@ -36,9 +36,10 @@ DEFAULT_MAX_CHANNELS = 8
 PUBLIC_CHANNEL_NAME = PUBLIC.name
 PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 
-# Path hash mode value for 2-byte-per-hop path hashes (0=1 byte, 1=2 bytes,
-# 2=4 bytes, 3=8 bytes). Keeps message overhead low while still avoiding the
-# 1-byte mode's collision rate on busier meshes.
+# Path hash mode value for 2-byte-per-hop path hashes (mode N means N+1
+# bytes per hop: 0=1 byte, 1=2 bytes, ...; see IncomingMessage.path_hash_size).
+# Keeps message overhead low while still avoiding the 1-byte mode's collision
+# rate on busier meshes.
 PATH_HASH_MODE_2_BYTE = 1
 
 
