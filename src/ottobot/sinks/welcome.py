@@ -7,10 +7,11 @@ where the bot answers commands (it stays quiet on public — see
 the bot doesn't re-greet people across restarts; each row also tracks when
 the name was first seen and last heard from.
 
-Welcomes are rate limited to one per ``WELCOME_INTERVAL`` so a burst of
-newcomers doesn't flood the channel. A newcomer who arrives during the
-cooldown isn't recorded yet, so a later message from them (once the
-cooldown is over) still gets the greeting.
+Welcomes are rate limited so a burst of newcomers doesn't flood the
+channel: a newcomer is greeted only if no other newcomer was recorded in
+the last ``WELCOME_INTERVAL``. Everyone is still recorded immediately, so
+a newcomer who lands inside the cooldown simply never gets the greeting
+(dropped, not deferred).
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from ottobot.channels import PUBLIC
 # on public).
 WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at https://ottawamesh.ca"
 
-# Minimum time between two welcome messages (issue #80: don't greet too fast).
+# A newcomer is greeted only if no other new name was recorded within this
+# window (issue #80: don't greet too fast).
 WELCOME_INTERVAL = timedelta(hours=1)
 
 
@@ -52,13 +54,13 @@ def _init_db(db_path: Path) -> None:
 def _record(db_path: Path, identifier: str, now: str) -> bool:
     """Record that *identifier* was just seen; return True if they should be welcomed.
 
-    A known name just gets its last_seen bumped. A new name is inserted —
-    and welcomed — only when the previous welcome is at least
-    WELCOME_INTERVAL old; rows are only ever inserted at welcome time, so
-    the newest first_seen in the table *is* the last welcome time, and the
-    rate limit costs no extra writes or columns. During the cooldown the
-    newcomer is left unrecorded so a later message from them still triggers
-    the greeting.
+    A known name just gets its last_seen bumped. A new name is always
+    inserted right away, but greeted only when the previous newcomer's
+    first_seen is at least WELCOME_INTERVAL old — the newest first_seen in
+    the table is the rate-limit clock, so no extra column, in-memory state,
+    or writes are needed. A newcomer who lands inside the cooldown is
+    recorded like any other and therefore never greeted (welcomes are
+    dropped, not deferred).
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(
@@ -67,18 +69,17 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
         )
         if cur.rowcount:  # already known — never re-welcomed
             return False
-        (last_welcome,) = conn.execute(
+        (newest_first_seen,) = conn.execute(
             "SELECT MAX(first_seen) FROM seen_clients"
         ).fetchone()
-        if last_welcome is not None:
-            elapsed = datetime.fromisoformat(now) - datetime.fromisoformat(last_welcome)
-            if elapsed < WELCOME_INTERVAL:
-                return False
         conn.execute(
             "INSERT INTO seen_clients (id, first_seen, last_seen) VALUES (?, ?, ?)",
             (identifier, now, now),
         )
-    return True
+    if newest_first_seen is None:
+        return True
+    elapsed = datetime.fromisoformat(now) - datetime.fromisoformat(newest_first_seen)
+    return elapsed >= WELCOME_INTERVAL
 
 
 @on_start()

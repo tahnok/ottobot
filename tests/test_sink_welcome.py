@@ -46,13 +46,16 @@ async def test_repeat_from_same_name_is_silent(
 async def test_second_newcomer_in_quick_succession_is_rate_limited(
     tmp_path: Path, reply: ReplyRecorder
 ) -> None:
-    # Only one welcome per WELCOME_INTERVAL: bob arrives right after alice,
-    # so his greeting is held back (he'll get it on a later message — see
-    # the _record tests below for the full timeline).
-    bot = await make_welcome_bot(tmp_path / "seen.db")
+    # bob arrives right after alice, inside the cooldown: he is recorded
+    # like any other newcomer but his greeting is dropped for good.
+    db_path = tmp_path / "seen.db"
+    bot = await make_welcome_bot(db_path)
     await bot.dispatch(chan("hi", "alice"), reply)
     await bot.dispatch(chan("hi", "bob"), reply)
     assert reply.replies == [WELCOME]
+    with sqlite3.connect(db_path) as conn:
+        names = {row[0] for row in conn.execute("SELECT id FROM seen_clients")}
+    assert names == {"alice", "bob"}  # recorded right away despite no greeting
 
 
 async def test_channel_message_without_a_name_is_ignored(
@@ -112,31 +115,32 @@ def test_record_tracks_first_and_last_seen(tmp_path: Path) -> None:
 
 
 def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None:
-    # bob shows up 30 minutes after alice's welcome: too soon, and he is
-    # left unrecorded so a message after the cooldown still greets him.
+    # bob shows up 30 minutes after alice: too soon. He is recorded right
+    # away anyway, and the missed greeting is dropped — a later message
+    # from him is just a repeat from a known name.
     db_path = tmp_path / "seen.db"
     welcome_module._init_db(db_path)
     t0 = "2026-01-01T00:00:00+00:00"
     t0_plus_30m = "2026-01-01T00:30:00+00:00"
-    t0_plus_61m = "2026-01-01T01:01:00+00:00"
+    t0_plus_2h = "2026-01-01T02:00:00+00:00"
     assert welcome_module._record(db_path, "alice", t0) is True
     assert welcome_module._record(db_path, "bob", t0_plus_30m) is False
     with sqlite3.connect(db_path) as conn:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM seen_clients WHERE id = 'bob'"
+        first_seen = conn.execute(
+            "SELECT first_seen FROM seen_clients WHERE id = 'bob'"
         ).fetchone()[0]
-    assert count == 0  # not recorded during the cooldown
-    assert welcome_module._record(db_path, "bob", t0_plus_61m) is True
+    assert first_seen == t0_plus_30m  # recorded immediately despite no greeting
+    assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
 
 
-def test_record_cooldown_runs_from_the_last_welcome(tmp_path: Path) -> None:
-    # The interval is measured from the most recent welcome, not the first:
-    # carol arrives 30 minutes after bob's welcome and is held back even
-    # though alice's welcome is well over an hour old.
+def test_record_cooldown_runs_from_the_last_newcomer(tmp_path: Path) -> None:
+    # The clock is the most recently recorded newcomer, greeted or not:
+    # bob (ungreeted, 30 minutes after alice) still pushes carol's arrival
+    # 45 minutes later inside the cooldown, while dave — over an hour after
+    # carol — is greeted again.
     db_path = tmp_path / "seen.db"
     welcome_module._init_db(db_path)
     assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
-    assert welcome_module._record(db_path, "bob", "2026-01-01T02:00:00+00:00")
-    assert (
-        welcome_module._record(db_path, "carol", "2026-01-01T02:30:00+00:00") is False
-    )
+    assert not welcome_module._record(db_path, "bob", "2026-01-01T00:30:00+00:00")
+    assert not welcome_module._record(db_path, "carol", "2026-01-01T01:15:00+00:00")
+    assert welcome_module._record(db_path, "dave", "2026-01-01T02:20:00+00:00")
