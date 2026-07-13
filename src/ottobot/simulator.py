@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 
 from .bot import Ottobot
-from .channels import BOTS
+from .channels import BOTS, is_command_channel
 from .context import IncomingMessage, TaskContext
 
 BANNER = (
@@ -92,8 +92,8 @@ class Simulator:
         await self.bot.dispatch(self.build_message(line), reply)
         if len(replies) == 0:
             text, _ = self.bot.strip_address(line)
-            if self.bot.parse(text) is not None and not any(
-                c.index == self.channel_idx for c in self.bot.command_channels
+            if self.bot.parse(text) is not None and not is_command_channel(
+                self.channel_idx, self.bot.command_channels
             ):
                 return [
                     f"(no response — commands are not answered on channel "

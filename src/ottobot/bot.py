@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
-from .channels import COMMAND_CHANNELS, ChannelConfig
+from .channels import COMMAND_CHANNELS, ChannelConfig, is_command_channel
 from .config import BotConfig
 from .registry import (
     Command,
@@ -200,7 +200,7 @@ class Ottobot:
             return
         # Commands are only answered on the designated command channels, so
         # bot conversations stay off e.g. the public and alert channels.
-        if not any(c.index == message.channel_idx for c in self.command_channels):
+        if not is_command_channel(message.channel_idx, self.command_channels):
             logger.debug(
                 "ignoring %r on channel %d: not a command channel",
                 command.name,

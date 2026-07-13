@@ -47,6 +47,13 @@ CHANNELS: tuple[ChannelConfig, ...] = (
 COMMAND_CHANNELS: tuple[ChannelConfig, ...] = (BOTS, TESTING, OTTOBOT_TESTING)
 
 
+def is_command_channel(
+    index: int, command_channels: tuple[ChannelConfig, ...] = COMMAND_CHANNELS
+) -> bool:
+    """Whether device slot *index* is a channel the bot answers commands on."""
+    return any(channel.index == index for channel in command_channels)
+
+
 def channel_for_index(index: int) -> ChannelConfig | None:
     """The joined channel occupying device slot *index*, or None if unused."""
     for channel in CHANNELS:
