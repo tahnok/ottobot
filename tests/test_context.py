@@ -1,4 +1,5 @@
-from ottobot.context import IncomingMessage
+from helpers import ReplyRecorder
+from ottobot.context import Context, IncomingMessage
 
 
 class TestHopCount:
@@ -39,3 +40,26 @@ class TestPathDescription:
         direct = IncomingMessage(text="hi", path_len=255, path_hash_mode=-1)
         assert direct.path_hash_size == 1
         assert direct.path_description == "direct"
+
+
+def _ctx(reply: ReplyRecorder) -> Context:
+    return Context(
+        message=IncomingMessage(text="hi"), command_name=None, args="", _reply=reply
+    )
+
+
+class TestReplyChunks:
+    async def test_short_text_is_one_reply(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_chunks("hello")
+        assert reply.replies == ["hello"]
+
+    async def test_long_text_is_split_into_multiple_replies(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_chunks("aaaa\nbbbb\ncccc", limit=9)
+        assert reply.replies == ["aaaa\nbbbb", "cccc"]
+
+    async def test_empty_text_sends_nothing(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_chunks("")
+        assert reply.replies == []

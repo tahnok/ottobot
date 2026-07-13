@@ -287,3 +287,23 @@ class TestHelp:
         text = reply.replies[0]
         assert "!help - List available commands" in text
         assert "!ping - Check liveness" in text
+
+    async def test_help_chunks_a_long_listing(
+        self, bot: Ottobot, reply: ReplyRecorder
+    ) -> None:
+        # Enough commands that the listing exceeds one mesh packet; it should
+        # be split across replies rather than truncated into one.
+        from ottobot import MAX_MESSAGE_LEN
+
+        for i in range(30):
+
+            @bot.command(f"cmd{i}", help="does a thing worth describing")
+            async def handler(ctx: Context) -> str:
+                return "ok"
+
+        await bot.dispatch(addressed("!help"), reply)
+        assert len(reply.replies) > 1
+        assert all(len(chunk) <= MAX_MESSAGE_LEN for chunk in reply.replies)
+        joined = "\n".join(reply.replies)
+        assert "!cmd0 - does a thing worth describing" in joined
+        assert "!cmd29 - does a thing worth describing" in joined

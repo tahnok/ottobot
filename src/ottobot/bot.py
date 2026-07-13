@@ -231,11 +231,13 @@ class Ottobot:
         if result is not None:
             await reply(result)
 
-    async def _help(self, ctx: Context) -> str:
+    async def _help(self, ctx: Context) -> None:
         lines = []
         for command in self.registry.all():
             entry = f"{self.prefix}{command.name}"
             if command.help:
                 entry += f" - {command.help}"
             lines.append(entry)
-        return "\n".join(lines)
+        # The listing grows as commands are added and would otherwise be
+        # truncated by the mesh; send it in packet-sized chunks.
+        await ctx.reply_chunks("\n".join(lines))
