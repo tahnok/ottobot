@@ -6,6 +6,11 @@ where the bot answers commands (it stays quiet on public — see
 ``channels.COMMAND_CHANNELS``). Seen names are stored in a sqlite file so
 the bot doesn't re-greet people across restarts; each row also tracks when
 the name was first seen and last heard from.
+
+Welcomes are rate limited to one per ``WELCOME_INTERVAL`` so a burst of
+newcomers doesn't flood the channel. A newcomer who arrives during the
+cooldown isn't recorded yet, so a later message from them (once the
+cooldown is over) still gets the greeting.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ottobot import Context, Ottobot, on_start, sink
@@ -23,6 +28,9 @@ from ottobot.channels import PUBLIC
 # channel newcomers need to reach the bot (commands aren't answered here
 # on public).
 WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at https://ottawamesh.ca"
+
+# Minimum time between two welcome messages (issue #80: don't greet too fast).
+WELCOME_INTERVAL = timedelta(hours=1)
 
 
 logger = logging.getLogger(__name__)
@@ -42,23 +50,35 @@ def _init_db(db_path: Path) -> None:
 
 
 def _record(db_path: Path, identifier: str, now: str) -> bool:
-    """Record that *identifier* was just seen; return True if it's the first time.
+    """Record that *identifier* was just seen; return True if they should be welcomed.
 
-    A single upsert: inserts a new row on first sight, otherwise bumps
-    last_seen and leaves first_seen alone. RETURNING gives back first_seen,
-    which equals *now* only when the row was just inserted (on a repeat it's
-    the older original timestamp), so that's how we detect a newcomer.
+    A known name just gets its last_seen bumped. A new name is inserted —
+    and welcomed — only when the previous welcome is at least
+    WELCOME_INTERVAL old; rows are only ever inserted at welcome time, so
+    the newest first_seen in the table *is* the last welcome time, and the
+    rate limit costs no extra writes or columns. During the cooldown the
+    newcomer is left unrecorded so a later message from them still triggers
+    the greeting.
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(
-            "INSERT INTO seen_clients (id, first_seen, last_seen) "
-            "VALUES (?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET last_seen = excluded.last_seen "
-            "RETURNING first_seen",
+            "UPDATE seen_clients SET last_seen = ? WHERE id = ?",
+            (now, identifier),
+        )
+        if cur.rowcount:  # already known — never re-welcomed
+            return False
+        (last_welcome,) = conn.execute(
+            "SELECT MAX(first_seen) FROM seen_clients"
+        ).fetchone()
+        if last_welcome is not None:
+            elapsed = datetime.fromisoformat(now) - datetime.fromisoformat(last_welcome)
+            if elapsed < WELCOME_INTERVAL:
+                return False
+        conn.execute(
+            "INSERT INTO seen_clients (id, first_seen, last_seen) VALUES (?, ?, ?)",
             (identifier, now, now),
         )
-        first_seen = cur.fetchone()[0]
-    return first_seen == now
+    return True
 
 
 @on_start()
@@ -79,7 +99,7 @@ async def welcome(ctx: Context) -> str | None:
     if ctx.message.channel_idx != PUBLIC.index:
         return
     now = datetime.now(timezone.utc).isoformat()
-    is_new = await asyncio.to_thread(_record, ctx.config.database, name, now)
+    should_welcome = await asyncio.to_thread(_record, ctx.config.database, name, now)
 
-    if is_new:
+    if should_welcome:
         return WELCOME
