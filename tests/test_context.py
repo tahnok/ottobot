@@ -1,4 +1,5 @@
-from ottobot.context import IncomingMessage
+from helpers import ReplyRecorder
+from ottobot.context import Context, IncomingMessage
 
 
 class TestHopCount:
@@ -39,3 +40,26 @@ class TestPathDescription:
         direct = IncomingMessage(text="hi", path_len=255, path_hash_mode=-1)
         assert direct.path_hash_size == 1
         assert direct.path_description == "direct"
+
+
+def _ctx(reply: ReplyRecorder) -> Context:
+    return Context(
+        message=IncomingMessage(text="hi"), command_name=None, args="", _reply=reply
+    )
+
+
+class TestReplyMany:
+    async def test_each_string_is_sent_in_order(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_many(["one", "two", "three"])
+        assert reply.replies == ["one", "two", "three"]
+
+    async def test_empty_iterable_sends_nothing(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_many([])
+        assert reply.replies == []
+
+    async def test_accepts_a_generator(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_many(f"n{i}" for i in range(3))
+        assert reply.replies == ["n0", "n1", "n2"]
