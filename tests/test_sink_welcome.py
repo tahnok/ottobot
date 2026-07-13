@@ -84,6 +84,39 @@ async def test_persists_across_restart(tmp_path: Path, reply: ReplyRecorder) -> 
     assert reply.replies == [WELCOME]
 
 
+async def test_faraway_newcomer_is_not_greeted_and_not_recorded(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    # A newcomer heard from beyond WELCOME_MAX_HOPS is out of scope: no
+    # greeting, and (unlike the cooldown) not recorded either, so the same
+    # name is greeted normally once heard from within range.
+    db_path = tmp_path / "seen.db"
+    bot = await make_welcome_bot(db_path)
+    await bot.dispatch(channel_msg("hi from afar", path_len=6), reply)
+    assert reply.replies == []
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM seen_clients").fetchone() == (0,)
+    await bot.dispatch(channel_msg("hi again, closer now", path_len=2), reply)
+    assert reply.replies == [WELCOME]
+
+
+async def test_newcomer_at_the_hop_limit_is_greeted(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(
+        channel_msg("hi", path_len=welcome_module.WELCOME_MAX_HOPS), reply
+    )
+    assert reply.replies == [WELCOME]
+
+
+async def test_direct_newcomer_is_greeted(tmp_path: Path, reply: ReplyRecorder) -> None:
+    # path_len 255 means the message arrived directly (zero hops).
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(channel_msg("hi", path_len=255), reply)
+    assert reply.replies == [WELCOME]
+
+
 async def test_non_public_channel_is_ignored(
     tmp_path: Path, reply: ReplyRecorder
 ) -> None:
@@ -139,6 +172,21 @@ def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None
         ).fetchone()[0]
     assert first_seen == t0_plus_30m  # recorded immediately despite no greeting
     assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
+
+
+def test_should_greet_scopes_by_channel_and_hops() -> None:
+    # The greeting scope in one place: public channel only, and only
+    # network-local senders (unknown path counts as local).
+    max_hops = welcome_module.WELCOME_MAX_HOPS
+
+    def msg(idx: int = 0, path_len: int | None = None) -> IncomingMessage:
+        return IncomingMessage(text="hi", channel_idx=idx, path_len=path_len)
+
+    assert welcome_module._should_greet(msg())  # unknown path
+    assert welcome_module._should_greet(msg(path_len=255))  # direct
+    assert welcome_module._should_greet(msg(path_len=max_hops))  # at the limit
+    assert not welcome_module._should_greet(msg(path_len=max_hops + 1))
+    assert not welcome_module._should_greet(msg(idx=1))  # not the public channel
 
 
 def test_record_cooldown_runs_from_the_last_greeting(tmp_path: Path) -> None:
