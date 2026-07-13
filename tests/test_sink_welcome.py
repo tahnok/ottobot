@@ -84,6 +84,39 @@ async def test_persists_across_restart(tmp_path: Path, reply: ReplyRecorder) -> 
     assert reply.replies == [WELCOME]
 
 
+async def test_faraway_newcomer_is_not_greeted_and_not_recorded(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    # A newcomer heard from beyond WELCOME_MAX_HOPS is out of scope: no
+    # greeting, and (unlike the cooldown) not recorded either, so the same
+    # name is greeted normally once heard from within range.
+    db_path = tmp_path / "seen.db"
+    bot = await make_welcome_bot(db_path)
+    await bot.dispatch(channel_msg("hi from afar", path_len=6), reply)
+    assert reply.replies == []
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM seen_clients").fetchone() == (0,)
+    await bot.dispatch(channel_msg("hi again, closer now", path_len=2), reply)
+    assert reply.replies == [WELCOME]
+
+
+async def test_newcomer_at_the_hop_limit_is_greeted(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(
+        channel_msg("hi", path_len=welcome_module.WELCOME_MAX_HOPS), reply
+    )
+    assert reply.replies == [WELCOME]
+
+
+async def test_direct_newcomer_is_greeted(tmp_path: Path, reply: ReplyRecorder) -> None:
+    # path_len 255 means the message arrived directly (zero hops).
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(channel_msg("hi", path_len=255), reply)
+    assert reply.replies == [WELCOME]
+
+
 async def test_non_public_channel_is_ignored(
     tmp_path: Path, reply: ReplyRecorder
 ) -> None:
@@ -139,6 +172,24 @@ def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None
         ).fetchone()[0]
     assert first_seen == t0_plus_30m  # recorded immediately despite no greeting
     assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
+
+
+def test_record_out_of_range_bumps_known_but_defers_newcomers(tmp_path: Path) -> None:
+    # A far sighting of a known name still bumps last_seen; a far sighting of
+    # a new name is neither recorded nor greeted and doesn't touch the
+    # rate-limit clock, so the same name is greeted once heard from closer.
+    db_path = tmp_path / "seen.db"
+    welcome_module._init_db(db_path)
+    day1 = "2026-01-01T00:00:00+00:00"
+    day2 = "2026-01-02T00:00:00+00:00"
+    day3 = "2026-01-03T00:00:00+00:00"
+    assert welcome_module._record(db_path, "alice", day1) is True
+    assert welcome_module._record(db_path, "alice", day2, in_range=False) is False
+    assert welcome_module._record(db_path, "bob", day2, in_range=False) is False
+    with sqlite3.connect(db_path) as conn:
+        rows = dict(conn.execute("SELECT id, last_seen FROM seen_clients"))
+    assert rows == {"alice": day2}  # alice bumped, bob not recorded
+    assert welcome_module._record(db_path, "bob", day3) is True  # still a newcomer
 
 
 def test_record_cooldown_runs_from_the_last_greeting(tmp_path: Path) -> None:

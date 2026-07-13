@@ -14,6 +14,12 @@ are rare; no point writing it to disk) and primed from the newest
 first_seen in the table after a restart. Everyone is still recorded
 immediately, so a newcomer who lands inside the cooldown simply never
 gets the greeting (dropped, not deferred).
+
+Greetings are scoped to the local mesh: messages that arrived over more
+than ``WELCOME_MAX_HOPS`` repeater hops don't count as a first sighting.
+Unlike the cooldown, this defers rather than drops — a faraway newcomer
+isn't recorded, so they still get the welcome the first time they're
+heard from within range.
 """
 
 from __future__ import annotations
@@ -34,6 +40,11 @@ WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '
 
 # Minimum time between two welcome messages (issue #80: don't greet too fast).
 WELCOME_INTERVAL = timedelta(hours=1)
+
+# Only greet nodes that are network-local: at most this many repeater hops
+# away. Messages with an unknown path (hop_count is None) are treated as in
+# range — real transports always report path_len.
+WELCOME_MAX_HOPS = 5
 
 # When the bot last greeted anyone — the rate-limit clock. Primed from the
 # newest first_seen in the database on the first newcomer after a restart;
@@ -60,7 +71,7 @@ def _init_db(db_path: Path) -> None:
         )
 
 
-def _record(db_path: Path, identifier: str, now: str) -> bool:
+def _record(db_path: Path, identifier: str, now: str, in_range: bool = True) -> bool:
     """Record that *identifier* was just seen; return True if they should be welcomed.
 
     A known name just gets its last_seen bumped. A new name is always
@@ -70,6 +81,10 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
     gets about one greeting per interval. A newcomer who lands inside the
     cooldown is recorded like any other and therefore never greeted
     (welcomes are dropped, not deferred).
+
+    A new name that is not *in_range* (heard from too many hops away) is
+    neither greeted nor inserted, so they remain a newcomer and get the
+    normal welcome the first time they show up within range.
     """
     global _last_welcome
     with sqlite3.connect(db_path) as conn:
@@ -78,6 +93,8 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
             (now, identifier),
         )
         if cur.rowcount:  # already known — never re-welcomed
+            return False
+        if not in_range:  # too far away — defer until heard from closer
             return False
         if _last_welcome is None:
             (newest_first_seen,) = conn.execute(
@@ -113,8 +130,12 @@ async def welcome(ctx: Context) -> str | None:
 
     if ctx.message.channel_idx != PUBLIC.index:
         return
+    hops = ctx.message.hop_count
+    in_range = hops is None or hops <= WELCOME_MAX_HOPS
     now = datetime.now(timezone.utc).isoformat()
-    should_welcome = await asyncio.to_thread(_record, ctx.config.database, name, now)
+    should_welcome = await asyncio.to_thread(
+        _record, ctx.config.database, name, now, in_range
+    )
 
     if should_welcome:
         return WELCOME
