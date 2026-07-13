@@ -293,7 +293,7 @@ class TestHelp:
     ) -> None:
         # Enough commands that the listing exceeds one mesh packet; it should
         # be split across replies rather than truncated into one.
-        from ottobot import MAX_MESSAGE_LEN
+        from ottobot.bot import MAX_MESSAGE_LEN
 
         for i in range(30):
 

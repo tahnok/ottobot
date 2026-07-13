@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .chunking import MAX_MESSAGE_LEN, chunk_message
 from .config import BotConfig
 
 
@@ -103,17 +102,16 @@ class Context:
         """Send text back on the channel the message came from."""
         await self._reply(text)
 
-    async def reply_chunks(self, text: str, limit: int = MAX_MESSAGE_LEN) -> None:
-        """Send text as one or more replies, each within the mesh size limit.
+    async def reply_many(self, texts: Iterable[str]) -> None:
+        """Send each string in *texts* as its own reply, in order.
 
         Opt-in: a plain reply (or a returned string) goes out as a single
-        packet and is truncated by the mesh past ~140 characters. Commands
-        whose output can grow past that — like a full command listing — call
-        this instead, and it splits on line/word boundaries and sends each
-        chunk as its own reply. Empty text sends nothing.
+        packet and is truncated by the mesh past ~140 characters. A command
+        whose output doesn't fit one packet builds its own packet-sized
+        pieces and passes them here.
         """
-        for chunk in chunk_message(text, limit):
-            await self._reply(chunk)
+        for text in texts:
+            await self._reply(text)
 
 
 @dataclass(frozen=True)

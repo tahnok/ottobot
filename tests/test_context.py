@@ -48,18 +48,18 @@ def _ctx(reply: ReplyRecorder) -> Context:
     )
 
 
-class TestReplyChunks:
-    async def test_short_text_is_one_reply(self) -> None:
+class TestReplyMany:
+    async def test_each_string_is_sent_in_order(self) -> None:
         reply = ReplyRecorder()
-        await _ctx(reply).reply_chunks("hello")
-        assert reply.replies == ["hello"]
+        await _ctx(reply).reply_many(["one", "two", "three"])
+        assert reply.replies == ["one", "two", "three"]
 
-    async def test_long_text_is_split_into_multiple_replies(self) -> None:
+    async def test_empty_iterable_sends_nothing(self) -> None:
         reply = ReplyRecorder()
-        await _ctx(reply).reply_chunks("aaaa\nbbbb\ncccc", limit=9)
-        assert reply.replies == ["aaaa\nbbbb", "cccc"]
-
-    async def test_empty_text_sends_nothing(self) -> None:
-        reply = ReplyRecorder()
-        await _ctx(reply).reply_chunks("")
+        await _ctx(reply).reply_many([])
         assert reply.replies == []
+
+    async def test_accepts_a_generator(self) -> None:
+        reply = ReplyRecorder()
+        await _ctx(reply).reply_many(f"n{i}" for i in range(3))
+        assert reply.replies == ["n0", "n1", "n2"]

@@ -29,6 +29,10 @@ from .context import Context, IncomingMessage, ReplyFunc
 
 logger = logging.getLogger(__name__)
 
+# MeshCore truncates a channel message past ~140 characters, so a listing
+# longer than this is sent as several replies rather than one clipped one.
+MAX_MESSAGE_LEN = 140
+
 
 class Ottobot:
     """A chatbot that responds to prefixed commands, e.g. "!ping".
@@ -232,12 +236,22 @@ class Ottobot:
             await reply(result)
 
     async def _help(self, ctx: Context) -> None:
-        lines = []
+        # The listing grows as commands are added and would be truncated by
+        # the mesh, so pack whole entries into packet-sized chunks (a new
+        # chunk once the next entry wouldn't fit) and send each separately.
+        chunks: list[str] = []
+        current = ""
         for command in self.registry.all():
             entry = f"{self.prefix}{command.name}"
             if command.help:
                 entry += f" - {command.help}"
-            lines.append(entry)
-        # The listing grows as commands are added and would otherwise be
-        # truncated by the mesh; send it in packet-sized chunks.
-        await ctx.reply_chunks("\n".join(lines))
+            candidate = f"{current}\n{entry}" if current else entry
+            if len(candidate) <= MAX_MESSAGE_LEN:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = entry
+        if current:
+            chunks.append(current)
+        await ctx.reply_many(chunks)
