@@ -7,7 +7,9 @@ Type messages exactly as you would send them over the mesh ("@[ottobot]
 — nothing touches the network. Lines starting with "/" control the
 simulated sender instead of going to the bot:
 
-    /channel [n]        talk on channel n (default 0, where you start)
+    /channel [n]        talk on channel n (no n: back to #bots, where you
+                        start — commands are only answered on the command
+                        channels, see ottobot.channels.COMMAND_CHANNELS)
     /name <name>        change the simulated sender's name
     /hops <n> [a1,b2]   pretend messages took n repeater hops, optionally
                         via the given comma-separated hop hashes
@@ -23,6 +25,7 @@ from __future__ import annotations
 import asyncio
 
 from .bot import Ottobot
+from .channels import BOTS
 from .context import IncomingMessage, TaskContext
 
 BANNER = (
@@ -32,7 +35,7 @@ BANNER = (
 )
 
 CONTROL_HELP = [
-    "/channel [n]        talk on channel n (default 0, where you start)",
+    "/channel [n]        talk on channel n (no n: back to #bots, where you start)",
     "/name <name>        change the simulated sender's name",
     "/hops <n> [a1,b2]   pretend messages took n repeater hops",
     "/task [name]        run a scheduled task once, right now",
@@ -53,7 +56,9 @@ class Simulator:
     def __init__(self, bot: Ottobot) -> None:
         self.bot = bot
         self.sender_name = "you"
-        self.channel_idx = 0  # start on channel 0, like the mesh default
+        # Start on #bots so commands answer out of the box; /channel 0
+        # simulates the public channel, where commands are ignored.
+        self.channel_idx = BOTS.index
         self.path_len: int = 255  # arrived direct, like a nearby node
         self.path: str | None = None
         self.done = False
@@ -86,6 +91,14 @@ class Simulator:
 
         await self.bot.dispatch(self.build_message(line), reply)
         if len(replies) == 0:
+            text, _ = self.bot.strip_address(line)
+            if self.bot.parse(text) is not None and not any(
+                c.index == self.channel_idx for c in self.bot.command_channels
+            ):
+                return [
+                    f"(no response — commands are not answered on channel "
+                    f"{self.channel_idx}; /channel hops back to #bots)"
+                ]
             return ["(no response)"]
         out: list[str] = []
         for text in replies:
@@ -100,7 +113,7 @@ class Simulator:
         match name.lower():
             case "channel" | "ch":
                 try:
-                    self.channel_idx = int(args) if args else 0
+                    self.channel_idx = int(args) if args else BOTS.index
                 except ValueError:
                     return [f"channel must be a number, got {args!r}"]
                 return [f"now talking on channel {self.channel_idx}"]

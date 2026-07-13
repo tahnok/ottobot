@@ -30,8 +30,21 @@ PUBLIC = ChannelConfig(0, "public")
 TESTING = ChannelConfig(1, "#testing")
 OTTOBOT_TESTING = ChannelConfig(2, "#ottobot-testing")
 OTT_ALERTS = ChannelConfig(3, "#ott-alerts")
+BOTS = ChannelConfig(4, "#bots")
 
-CHANNELS: tuple[ChannelConfig, ...] = (PUBLIC, TESTING, OTTOBOT_TESTING, OTT_ALERTS)
+CHANNELS: tuple[ChannelConfig, ...] = (
+    PUBLIC,
+    TESTING,
+    OTTOBOT_TESTING,
+    OTT_ALERTS,
+    BOTS,
+)
+
+# Where the bot answers commands. It still *hears* every channel it has
+# joined (sinks see everything, e.g. the public-channel welcome), but
+# command replies are kept off the public and alert channels so the bot
+# doesn't add chatter there — conversations happen on #bots.
+COMMAND_CHANNELS: tuple[ChannelConfig, ...] = (BOTS, TESTING, OTTOBOT_TESTING)
 
 
 def channel_for_index(index: int) -> ChannelConfig | None:
