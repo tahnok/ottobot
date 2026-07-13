@@ -42,6 +42,15 @@ By default the bot uses the connected device's own advertised name; pass
 the name in channels with `@command(..., requires_address=False)`, for
 commands meant to react to any channel message.
 
+### Where the bot answers
+
+The bot joins several channels but only answers commands on **#bots**,
+**#testing**, and **#ottobot-testing** — see `COMMAND_CHANNELS` in
+[`src/ottobot/channels.py`](src/ottobot/channels.py). Everywhere else it
+stays quiet: on the public channel it only greets newcomers once (pointing
+them at #bots), and #ott-alerts carries only scheduled alert broadcasts.
+Sinks still see every message on every joined channel.
+
 ## Config file
 
 A TOML config file can act as the source of truth for the device's
@@ -177,7 +186,10 @@ them over the mesh (`@[ottobot] !ping`, `@[ottobot] !roll 20`, ...) and the
 bot's replies are printed back. Everything runs in memory — no device is
 needed and nothing
 is sent over the mesh, so it's the place to test a command you're working
-on before spamming a real channel.
+on before spamming a real channel. You start on the #bots channel so
+commands answer right away; `/channel 0` switches to the public channel,
+where commands are ignored (see
+[Where the bot answers](#where-the-bot-answers)).
 
 
 ## Commands

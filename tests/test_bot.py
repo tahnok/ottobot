@@ -1,7 +1,8 @@
 import pytest
 
 from helpers import ReplyRecorder, addressed, channel_msg
-from ottobot import Command, Context, Ottobot
+from ottobot import Command, Context, Ottobot, Sink
+from ottobot.channels import BOTS, OTT_ALERTS, OTTOBOT_TESTING, PUBLIC, TESTING
 
 
 class TestParse:
@@ -141,7 +142,7 @@ class TestDispatch:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
+        await bot.dispatch(channel_msg("@[ottobot] !ping", idx=BOTS.index), reply)
         assert reply.replies == ["pong"]
 
 
@@ -186,24 +187,24 @@ class TestAddressing:
 
     async def test_channel_requires_name(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        await bot.dispatch(channel_msg("!ping"), reply)
+        await bot.dispatch(channel_msg("!ping", idx=BOTS.index), reply)
         assert reply.replies == []
 
     async def test_channel_runs_when_addressed(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        await bot.dispatch(channel_msg("ottobot !ping"), reply)
+        await bot.dispatch(channel_msg("ottobot !ping", idx=BOTS.index), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_runs_with_app_mention(self, reply: ReplyRecorder) -> None:
         bot = _named_bot()
-        await bot.dispatch(channel_msg("@[ottobot] !ping"), reply)
+        await bot.dispatch(channel_msg("@[ottobot] !ping", idx=BOTS.index), reply)
         assert reply.replies == ["pong"]
 
     async def test_channel_opt_out_runs_without_name(
         self, reply: ReplyRecorder
     ) -> None:
         bot = _named_bot()
-        await bot.dispatch(channel_msg("!status"), reply)
+        await bot.dispatch(channel_msg("!status", idx=BOTS.index), reply)
         assert reply.replies == ["ok"]
 
     async def test_context_exposes_sender(
@@ -217,6 +218,60 @@ class TestAddressing:
 
         await bot.dispatch(addressed("!who"), reply)
         assert seen == {"sender": "alice"}
+
+
+class TestCommandChannels:
+    """Commands are only answered on the designated command channels."""
+
+    @pytest.mark.parametrize(
+        "channel", [BOTS, TESTING, OTTOBOT_TESTING], ids=lambda c: c.name
+    )
+    async def test_commands_answer_on_command_channels(
+        self, channel, reply: ReplyRecorder
+    ) -> None:
+        bot = _named_bot()
+        await bot.dispatch(channel_msg("@[ottobot] !ping", idx=channel.index), reply)
+        assert reply.replies == ["pong"]
+
+    @pytest.mark.parametrize("channel", [PUBLIC, OTT_ALERTS], ids=lambda c: c.name)
+    async def test_commands_ignored_elsewhere(
+        self, channel, reply: ReplyRecorder
+    ) -> None:
+        bot = _named_bot()
+        await bot.dispatch(channel_msg("@[ottobot] !ping", idx=channel.index), reply)
+        assert reply.replies == []
+
+    async def test_restriction_applies_without_address_requirement(
+        self, reply: ReplyRecorder
+    ) -> None:
+        # Even a requires_address=False command stays quiet off the
+        # command channels.
+        bot = _named_bot()
+        await bot.dispatch(channel_msg("!status", idx=PUBLIC.index), reply)
+        assert reply.replies == []
+
+    async def test_sinks_still_see_other_channels(self, reply: ReplyRecorder) -> None:
+        bot = _named_bot()
+        seen: list[str] = []
+
+        async def watcher(ctx: Context) -> None:
+            seen.append(ctx.args)
+
+        bot.add_sink(Sink(handler=watcher))
+        await bot.dispatch(channel_msg("hello public", idx=PUBLIC.index), reply)
+        assert seen == ["hello public"]
+
+    async def test_command_channels_can_be_overridden(
+        self, reply: ReplyRecorder
+    ) -> None:
+        bot = Ottobot(name="ottobot", command_channels=(PUBLIC,))
+
+        @bot.command("ping")
+        async def ping(ctx: Context) -> str:
+            return "pong"
+
+        await bot.dispatch(channel_msg("@[ottobot] !ping", idx=PUBLIC.index), reply)
+        assert reply.replies == ["pong"]
 
 
 class TestHelp:

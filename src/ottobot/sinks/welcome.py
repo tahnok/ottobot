@@ -1,10 +1,11 @@
 """Greets newcomers
 
 Watches public (channel) messages and the first time it sees a given
-sender name, it replies with a short welcome pointing at !help. Seen names
-are stored in a sqlite file so the bot doesn't re-greet people across
-restarts; each row also tracks when the name was first seen and last heard
-from.
+sender name, it replies with a short welcome pointing at the #bots channel,
+where the bot answers commands (it stays quiet on public — see
+``channels.COMMAND_CHANNELS``). Seen names are stored in a sqlite file so
+the bot doesn't re-greet people across restarts; each row also tracks when
+the name was first seen and last heard from.
 """
 
 from __future__ import annotations
@@ -18,8 +19,10 @@ from pathlib import Path
 from ottobot import Context, Ottobot, on_start, sink
 from ottobot.channels import PUBLIC
 
-# under 140 chars plz
-WELCOME = "Welcome to the mesh! Say '@ottobot !channels' or !help for more from me. See also https://ottawamesh.ca"
+# under 140 chars plz — and mention only #bots, since that's the one
+# channel newcomers need to reach the bot (commands aren't answered here
+# on public).
+WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at https://ottawamesh.ca"
 
 
 logger = logging.getLogger(__name__)

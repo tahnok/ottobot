@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
-from .channels import ChannelConfig
+from .channels import COMMAND_CHANNELS, ChannelConfig, is_command_channel
 from .config import BotConfig
 from .registry import (
     Command,
@@ -51,11 +51,16 @@ class Ottobot:
         name: str,
         prefix: str = "!",
         config: BotConfig | None = None,
+        command_channels: tuple[ChannelConfig, ...] = COMMAND_CHANNELS,
     ) -> None:
         self.prefix = prefix
         # The bot's own name on the mesh. Commands that require addressing
         # only run when the message addresses this name (e.g. "@[ottobot] !ping").
         self.name = name
+        # The only channels commands are answered on; a command arriving
+        # anywhere else is silently ignored. Sinks are unaffected — they
+        # still see every message on every joined channel.
+        self.command_channels = command_channels
         # The loaded TOML config, surfaced to handlers via Context.config.
         self.config = config or BotConfig()
         self.registry = CommandRegistry()
@@ -192,6 +197,15 @@ class Ottobot:
         command = self.registry.get(name)
         if command is None:
             logger.debug("ignoring unknown command %r", name)
+            return
+        # Commands are only answered on the designated command channels, so
+        # bot conversations stay off e.g. the public and alert channels.
+        if not is_command_channel(message.channel_idx, self.command_channels):
+            logger.debug(
+                "ignoring %r on channel %d: not a command channel",
+                command.name,
+                message.channel_idx,
+            )
             return
         # Only answer when addressed by name, unless the command opts out.
         if command.requires_address and not addressed:
