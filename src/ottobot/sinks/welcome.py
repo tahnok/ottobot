@@ -7,11 +7,13 @@ where the bot answers commands (it stays quiet on public — see
 the bot doesn't re-greet people across restarts; each row also tracks when
 the name was first seen and last heard from.
 
-Welcomes are rate limited so a burst of newcomers doesn't flood the
-channel: a newcomer is greeted only if no other newcomer was recorded in
-the last ``WELCOME_INTERVAL``. Everyone is still recorded immediately, so
-a newcomer who lands inside the cooldown simply never gets the greeting
-(dropped, not deferred).
+Welcomes are rate limited to at most one per ``WELCOME_INTERVAL``,
+measured from the previous greeting, so a burst of newcomers doesn't
+flood the channel. The last-greeting clock is kept in memory (greetings
+are rare; no point writing it to disk) and primed from the newest
+first_seen in the table after a restart. Everyone is still recorded
+immediately, so a newcomer who lands inside the cooldown simply never
+gets the greeting (dropped, not deferred).
 """
 
 from __future__ import annotations
@@ -30,9 +32,14 @@ from ottobot.channels import PUBLIC
 # on public).
 WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at https://ottawamesh.ca"
 
-# A newcomer is greeted only if no other new name was recorded within this
-# window (issue #80: don't greet too fast).
+# Minimum time between two welcome messages (issue #80: don't greet too fast).
 WELCOME_INTERVAL = timedelta(hours=1)
+
+# When the bot last greeted anyone, per database file — the rate-limit clock.
+# Primed from the newest first_seen in that database on the first newcomer
+# after a restart; that timestamp can belong to an ungreeted newcomer, so at
+# worst the first post-restart greeting is delayed by one extra interval.
+_last_welcome: dict[Path, datetime] = {}
 
 
 logger = logging.getLogger(__name__)
@@ -55,12 +62,12 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
     """Record that *identifier* was just seen; return True if they should be welcomed.
 
     A known name just gets its last_seen bumped. A new name is always
-    inserted right away, but greeted only when the previous newcomer's
-    first_seen is at least WELCOME_INTERVAL old — the newest first_seen in
-    the table is the rate-limit clock, so no extra column, in-memory state,
-    or writes are needed. A newcomer who lands inside the cooldown is
-    recorded like any other and therefore never greeted (welcomes are
-    dropped, not deferred).
+    inserted right away, but greeted only when the last greeting (the
+    _last_welcome clock) is at least WELCOME_INTERVAL old — ungreeted
+    arrivals don't push the clock, so a steady trickle of newcomers still
+    gets about one greeting per interval. A newcomer who lands inside the
+    cooldown is recorded like any other and therefore never greeted
+    (welcomes are dropped, not deferred).
     """
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(
@@ -69,17 +76,22 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
         )
         if cur.rowcount:  # already known — never re-welcomed
             return False
-        (newest_first_seen,) = conn.execute(
-            "SELECT MAX(first_seen) FROM seen_clients"
-        ).fetchone()
+        if db_path not in _last_welcome:
+            (newest_first_seen,) = conn.execute(
+                "SELECT MAX(first_seen) FROM seen_clients"
+            ).fetchone()
+            if newest_first_seen is not None:
+                _last_welcome[db_path] = datetime.fromisoformat(newest_first_seen)
         conn.execute(
             "INSERT INTO seen_clients (id, first_seen, last_seen) VALUES (?, ?, ?)",
             (identifier, now, now),
         )
-    if newest_first_seen is None:
-        return True
-    elapsed = datetime.fromisoformat(now) - datetime.fromisoformat(newest_first_seen)
-    return elapsed >= WELCOME_INTERVAL
+    now_dt = datetime.fromisoformat(now)
+    last = _last_welcome.get(db_path)
+    if last is not None and now_dt - last < WELCOME_INTERVAL:
+        return False
+    _last_welcome[db_path] = now_dt
+    return True
 
 
 @on_start()

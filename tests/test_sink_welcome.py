@@ -4,12 +4,20 @@ at most one greeting per WELCOME_INTERVAL."""
 import sqlite3
 from pathlib import Path
 
+import pytest
 from helpers import ReplyRecorder, channel_msg
 from ottobot import IncomingMessage, Ottobot
 from ottobot.config import BotConfig
 from ottobot.sinks import register_module
 from ottobot.sinks import welcome as welcome_module
 from ottobot.sinks.welcome import WELCOME
+
+
+@pytest.fixture(autouse=True)
+def fresh_welcome_clock() -> None:
+    # The last-greeting clock is module-level state; start each test as if
+    # the bot just booted (the clock gets primed from the db when needed).
+    welcome_module._last_welcome.clear()
 
 
 async def make_welcome_bot(db_path: Path) -> Ottobot:
@@ -115,9 +123,9 @@ def test_record_tracks_first_and_last_seen(tmp_path: Path) -> None:
 
 
 def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None:
-    # bob shows up 30 minutes after alice: too soon. He is recorded right
-    # away anyway, and the missed greeting is dropped — a later message
-    # from him is just a repeat from a known name.
+    # bob shows up 30 minutes after alice's greeting: too soon. He is
+    # recorded right away anyway, and the missed greeting is dropped — a
+    # later message from him is just a repeat from a known name.
     db_path = tmp_path / "seen.db"
     welcome_module._init_db(db_path)
     t0 = "2026-01-01T00:00:00+00:00"
@@ -133,14 +141,25 @@ def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None
     assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
 
 
-def test_record_cooldown_runs_from_the_last_newcomer(tmp_path: Path) -> None:
-    # The clock is the most recently recorded newcomer, greeted or not:
-    # bob (ungreeted, 30 minutes after alice) still pushes carol's arrival
-    # 45 minutes later inside the cooldown, while dave — over an hour after
-    # carol — is greeted again.
+def test_record_cooldown_runs_from_the_last_greeting(tmp_path: Path) -> None:
+    # Ungreeted arrivals don't push the clock: bob (suppressed, 50 minutes
+    # after alice's greeting) doesn't delay carol, who arrives just over an
+    # hour after alice and is greeted — a steady trickle of newcomers still
+    # gets about one greeting per interval.
     db_path = tmp_path / "seen.db"
     welcome_module._init_db(db_path)
     assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
+    assert not welcome_module._record(db_path, "bob", "2026-01-01T00:50:00+00:00")
+    assert welcome_module._record(db_path, "carol", "2026-01-01T01:05:00+00:00")
+
+
+def test_record_primes_the_clock_from_the_db_after_a_restart(tmp_path: Path) -> None:
+    # The in-memory clock is empty after a restart; it is primed from the
+    # newest first_seen so the bot doesn't greet again right away, and a
+    # newcomer past the interval is greeted as usual.
+    db_path = tmp_path / "seen.db"
+    welcome_module._init_db(db_path)
+    assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
+    welcome_module._last_welcome.clear()  # "restart"
     assert not welcome_module._record(db_path, "bob", "2026-01-01T00:30:00+00:00")
-    assert not welcome_module._record(db_path, "carol", "2026-01-01T01:15:00+00:00")
-    assert welcome_module._record(db_path, "dave", "2026-01-01T02:20:00+00:00")
+    assert welcome_module._record(db_path, "carol", "2026-01-01T01:05:00+00:00")
