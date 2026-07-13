@@ -16,10 +16,10 @@ immediately, so a newcomer who lands inside the cooldown simply never
 gets the greeting (dropped, not deferred).
 
 Greetings are scoped to the local mesh: messages that arrived over more
-than ``WELCOME_MAX_HOPS`` repeater hops don't count as a first sighting.
-Unlike the cooldown, this defers rather than drops — a faraway newcomer
-isn't recorded, so they still get the welcome the first time they're
-heard from within range.
+than ``WELCOME_MAX_HOPS`` repeater hops are ignored outright — not even
+recorded. Unlike the cooldown, this defers rather than drops: a faraway
+newcomer still gets the welcome the first time they're heard from within
+range.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ottobot import Context, Ottobot, on_start, sink
+from ottobot import Context, IncomingMessage, Ottobot, on_start, sink
 from ottobot.channels import PUBLIC
 
 # under 140 chars plz — and mention only #bots, since that's the one
@@ -71,7 +71,7 @@ def _init_db(db_path: Path) -> None:
         )
 
 
-def _record(db_path: Path, identifier: str, now: str, in_range: bool = True) -> bool:
+def _record(db_path: Path, identifier: str, now: str) -> bool:
     """Record that *identifier* was just seen; return True if they should be welcomed.
 
     A known name just gets its last_seen bumped. A new name is always
@@ -81,10 +81,6 @@ def _record(db_path: Path, identifier: str, now: str, in_range: bool = True) -> 
     gets about one greeting per interval. A newcomer who lands inside the
     cooldown is recorded like any other and therefore never greeted
     (welcomes are dropped, not deferred).
-
-    A new name that is not *in_range* (heard from too many hops away) is
-    neither greeted nor inserted, so they remain a newcomer and get the
-    normal welcome the first time they show up within range.
     """
     global _last_welcome
     with sqlite3.connect(db_path) as conn:
@@ -93,8 +89,6 @@ def _record(db_path: Path, identifier: str, now: str, in_range: bool = True) -> 
             (now, identifier),
         )
         if cur.rowcount:  # already known — never re-welcomed
-            return False
-        if not in_range:  # too far away — defer until heard from closer
             return False
         if _last_welcome is None:
             (newest_first_seen,) = conn.execute(
@@ -113,6 +107,19 @@ def _record(db_path: Path, identifier: str, now: str, in_range: bool = True) -> 
     return True
 
 
+def _should_greet(message: IncomingMessage) -> bool:
+    """Whether *message* is in scope for a greeting at all.
+
+    Only the public channel, and only network-local senders — within
+    WELCOME_MAX_HOPS repeater hops (an unknown path counts as local).
+    Out-of-scope messages are ignored outright, before any recording.
+    """
+    if message.channel_idx != PUBLIC.index:
+        return False
+    hops = message.hop_count
+    return hops is None or hops <= WELCOME_MAX_HOPS
+
+
 @on_start()
 async def setup(bot: Ottobot) -> None:
     if not bot.config.database:
@@ -127,15 +134,11 @@ async def welcome(ctx: Context) -> str | None:
         return None
     if not ctx.config.database:
         return
-
-    if ctx.message.channel_idx != PUBLIC.index:
+    if not _should_greet(ctx.message):
         return
-    hops = ctx.message.hop_count
-    in_range = hops is None or hops <= WELCOME_MAX_HOPS
+
     now = datetime.now(timezone.utc).isoformat()
-    should_welcome = await asyncio.to_thread(
-        _record, ctx.config.database, name, now, in_range
-    )
+    should_welcome = await asyncio.to_thread(_record, ctx.config.database, name, now)
 
     if should_welcome:
         return WELCOME
