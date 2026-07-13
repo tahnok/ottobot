@@ -35,11 +35,13 @@ WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '
 # Minimum time between two welcome messages (issue #80: don't greet too fast).
 WELCOME_INTERVAL = timedelta(hours=1)
 
-# When the bot last greeted anyone, per database file — the rate-limit clock.
-# Primed from the newest first_seen in that database on the first newcomer
-# after a restart; that timestamp can belong to an ungreeted newcomer, so at
-# worst the first post-restart greeting is delayed by one extra interval.
-_last_welcome: dict[Path, datetime] = {}
+# When the bot last greeted anyone — the rate-limit clock. Primed from the
+# newest first_seen in the database on the first newcomer after a restart;
+# that timestamp can belong to an ungreeted newcomer, so at worst the first
+# post-restart greeting is delayed by one extra interval. A single global is
+# enough: a process runs one bot against one database (tests reset it via
+# the fresh_welcome_clock fixture).
+_last_welcome: datetime | None = None
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,7 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
     cooldown is recorded like any other and therefore never greeted
     (welcomes are dropped, not deferred).
     """
+    global _last_welcome
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(
             "UPDATE seen_clients SET last_seen = ? WHERE id = ?",
@@ -76,21 +79,20 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
         )
         if cur.rowcount:  # already known — never re-welcomed
             return False
-        if db_path not in _last_welcome:
+        if _last_welcome is None:
             (newest_first_seen,) = conn.execute(
                 "SELECT MAX(first_seen) FROM seen_clients"
             ).fetchone()
             if newest_first_seen is not None:
-                _last_welcome[db_path] = datetime.fromisoformat(newest_first_seen)
+                _last_welcome = datetime.fromisoformat(newest_first_seen)
         conn.execute(
             "INSERT INTO seen_clients (id, first_seen, last_seen) VALUES (?, ?, ?)",
             (identifier, now, now),
         )
     now_dt = datetime.fromisoformat(now)
-    last = _last_welcome.get(db_path)
-    if last is not None and now_dt - last < WELCOME_INTERVAL:
+    if _last_welcome is not None and now_dt - _last_welcome < WELCOME_INTERVAL:
         return False
-    _last_welcome[db_path] = now_dt
+    _last_welcome = now_dt
     return True
 
 

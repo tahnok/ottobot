@@ -17,7 +17,7 @@ from ottobot.sinks.welcome import WELCOME
 def fresh_welcome_clock() -> None:
     # The last-greeting clock is module-level state; start each test as if
     # the bot just booted (the clock gets primed from the db when needed).
-    welcome_module._last_welcome.clear()
+    welcome_module._last_welcome = None
 
 
 async def make_welcome_bot(db_path: Path) -> Ottobot:
@@ -160,6 +160,6 @@ def test_record_primes_the_clock_from_the_db_after_a_restart(tmp_path: Path) -> 
     db_path = tmp_path / "seen.db"
     welcome_module._init_db(db_path)
     assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
-    welcome_module._last_welcome.clear()  # "restart"
+    welcome_module._last_welcome = None  # "restart"
     assert not welcome_module._record(db_path, "bob", "2026-01-01T00:30:00+00:00")
     assert welcome_module._record(db_path, "carol", "2026-01-01T01:05:00+00:00")
