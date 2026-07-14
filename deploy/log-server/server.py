@@ -18,8 +18,8 @@ PORT = 8765
 ALLOWED_PROXY_IP = "192.168.0.54"
 REQUIRE_REVERSE_PROXY_HEADERS = True
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HTML_FILE = os.path.join(BASE_DIR, "index.html")
+BASE_DIR = "/opt/ottobot"
+HTML_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 
 UPDATE_LOG_FILE = "/var/log/ottobot-update.log"
 UPDATE_LOG_SERVICE_VALUE = "__ottobot_update_log__"

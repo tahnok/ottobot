@@ -15,8 +15,8 @@ Wants=network-online.target
 Type=simple
 User=dietpi
 Group=docker
-WorkingDirectory=/opt/ottobot/log-server
-ExecStart=/usr/bin/python3 /opt/ottobot/log-server/server.py
+WorkingDirectory=/opt/ottobot-log-server
+ExecStart=/usr/bin/python3 /opt/ottobot-log-server/server.py
 Restart=on-failure
 RestartSec=5
 
