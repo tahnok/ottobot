@@ -25,6 +25,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=false
 ProtectSystem=full
+ReadWritePaths=/var/log/ottobot-update.log
 
 [Install]
 WantedBy=multi-user.target
