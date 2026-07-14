@@ -150,6 +150,27 @@ class TestParseAlerts:
         assert alerts_mod.parse_alerts(xml) == []
 
 
+class TestAlertKey:
+    def test_drops_slot_marker_keeping_region_and_timestamp(self) -> None:
+        assert (
+            alerts_mod.alert_key(
+                "tag:weather.gc.ca,2013-04-16:onrm104_w2:20260714091437"
+            )
+            == "tag:weather.gc.ca,2013-04-16:onrm104:20260714091437"
+        )
+
+    def test_same_alert_in_different_slots_shares_a_key(self) -> None:
+        assert alerts_mod.alert_key(
+            "tag:weather.gc.ca,2013-04-16:onrm104_w1:20260714091437"
+        ) == alerts_mod.alert_key(
+            "tag:weather.gc.ca,2013-04-16:onrm104_w2:20260714091437"
+        )
+
+    def test_all_clear_id_without_slot_is_unchanged(self) -> None:
+        no_slot = "tag:weather.gc.ca,2013-04-16:20260704092826"
+        assert alerts_mod.alert_key(no_slot) == no_slot
+
+
 class TestWeatherAlertsTask:
     async def test_first_run_primes_without_announcing(
         self, monkeypatch: pytest.MonkeyPatch
@@ -158,8 +179,9 @@ class TestWeatherAlertsTask:
         replies: list[str] = []
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
+        # Stored slot-independent (the `_w1` marker is dropped).
         assert alerts_mod._seen == {
-            "tag:weather.gc.ca,2013-04-16:45.403-75.687_w1:20260630204242"
+            "tag:weather.gc.ca,2013-04-16:45.403-75.687:20260630204242"
         }
 
     async def test_second_run_announces_new_alert(
@@ -177,6 +199,40 @@ class TestWeatherAlertsTask:
             1,
         )
         fake_httpx_client(monkeypatch, text=updated)
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == ["YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa"]
+
+    async def test_reshuffled_alert_is_not_reannounced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A new alert pushes existing ones into higher-numbered slots,
+        # changing their <id>. The unchanged, merely-shifted alert must not
+        # be announced again — only the genuinely new one is.
+        heat = """<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
+<updated>2026-07-14T09:14:37Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20260714091437</id>
+<entry>
+  <title>YELLOW WARNING - HEAT, Ottawa</title>
+  <id>tag:weather.gc.ca,2013-04-16:onrm104_w1:20260714091437</id>
+</entry>
+</feed>"""
+        fake_httpx_client(monkeypatch, text=heat)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run: heat in w1
+
+        # Thunderstorm issued: it takes w1, heat shifts to w2 (new <id>).
+        both = """<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
+<updated>2026-07-14T16:48:06Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20260714164806</id>
+<entry>
+  <title>YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa</title>
+  <id>tag:weather.gc.ca,2013-04-16:onrm104_w1:20260714164806</id>
+</entry><entry>
+  <title>YELLOW WARNING - HEAT, Ottawa</title>
+  <id>tag:weather.gc.ca,2013-04-16:onrm104_w2:20260714091437</id>
+</entry>
+</feed>"""
+        fake_httpx_client(monkeypatch, text=both)
         replies: list[str] = []
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == ["YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa"]
