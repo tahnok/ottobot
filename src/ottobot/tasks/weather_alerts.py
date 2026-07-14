@@ -140,11 +140,10 @@ async def weather_alerts(ctx: TaskContext) -> None:
         return
 
     new_alerts = [pair for pair in alerts if alert_key(pair[0]) not in _seen]
-    # Announce oldest-first (the feed lists newest first), one message per
-    # alert.
-    for alert_id, title in reversed(new_alerts):
-        _seen.add(alert_key(alert_id))
-        await ctx.reply(title)
+    _seen.update(alert_key(alert_id) for alert_id, _ in new_alerts)
+    # Several alerts can be published in a single fetch; announce each on its
+    # own line/packet, oldest-first (the feed lists newest first).
+    await ctx.reply_many(title for _, title in reversed(new_alerts))
     # Drop keys that have left the feed so _seen doesn't grow forever on a
     # long-running bot. Keys embed their issue timestamp, so an ended
     # alert's key doesn't come back; a genuinely re-issued alert gets a

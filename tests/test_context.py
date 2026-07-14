@@ -1,5 +1,5 @@
 from helpers import ReplyRecorder
-from ottobot.context import Context, IncomingMessage
+from ottobot.context import Context, IncomingMessage, TaskContext
 
 
 class TestHopCount:
@@ -63,3 +63,15 @@ class TestReplyMany:
         reply = ReplyRecorder()
         await _ctx(reply).reply_many(f"n{i}" for i in range(3))
         assert reply.replies == ["n0", "n1", "n2"]
+
+
+class TestTaskContextReplyMany:
+    async def test_each_string_is_sent_in_order(self) -> None:
+        reply = ReplyRecorder()
+        await TaskContext(_reply=reply).reply_many(["one", "two"])
+        assert reply.replies == ["one", "two"]
+
+    async def test_empty_iterable_sends_nothing(self) -> None:
+        reply = ReplyRecorder()
+        await TaskContext(_reply=reply).reply_many([])
+        assert reply.replies == []

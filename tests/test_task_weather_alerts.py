@@ -237,6 +237,34 @@ class TestWeatherAlertsTask:
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == ["YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa"]
 
+    async def test_multiple_new_alerts_are_each_announced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Two alerts published in the same fetch: each gets its own message,
+        # oldest-first (the feed lists newest first).
+        empty_feed = '<feed xmlns="http://www.w3.org/2005/Atom"><title>x</title></feed>'
+        fake_httpx_client(monkeypatch, text=empty_feed)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        two_alerts = """<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
+<updated>2026-07-14T16:48:06Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20260714164806</id>
+<entry>
+  <title>YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa</title>
+  <id>tag:weather.gc.ca,2013-04-16:onrm104_w1:20260714164806</id>
+</entry><entry>
+  <title>YELLOW WARNING - HEAT, Ottawa</title>
+  <id>tag:weather.gc.ca,2013-04-16:onrm104_w2:20260714091437</id>
+</entry>
+</feed>"""
+        fake_httpx_client(monkeypatch, text=two_alerts)
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == [
+            "YELLOW WARNING - HEAT, Ottawa",
+            "YELLOW WATCH - SEVERE THUNDERSTORM, Ottawa",
+        ]
+
     async def test_unchanged_feed_announces_nothing(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
