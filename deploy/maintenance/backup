@@ -4,8 +4,7 @@ datestamp=$(date +%m-%d-%Y)
 #backup_dir="/mnt/nfs-service-backup"
 backup_dir="/opt"
 
-#no need to stop the container yet, but as soon as we introduce a DB we should stop the container before copying to prevent corruption.
-#docker compose down
+docker compose down
 tar -cf - \
         -C /opt/ottobot . | gzip -9 > "${backup_dir}/ottobot.tar.gz"
-#docker compose up -d
+docker compose up -d
