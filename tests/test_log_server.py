@@ -274,6 +274,73 @@ def test_maintenance_status_endpoint_returns_update_state(
         assert json.load(response) == {"running": False, "last_exit_code": 7}
 
 
+@pytest.mark.parametrize(("stdout", "running"), [("container-id\n", True), ("", False)])
+def test_maintenance_services_status_reports_compose_state(
+    stdout: str,
+    running: bool,
+    log_server: tuple[ModuleType, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, base_url = log_server
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    with urllib.request.urlopen(f"{base_url}/maintenance/services") as response:
+        assert response.status == 200
+        assert json.load(response) == {"running": running}
+
+
+@pytest.mark.parametrize(
+    ("status_stdout", "expected_command", "expected_running"),
+    [
+        ("container-id\n", ["docker", "compose", "down"], False),
+        ("", ["docker", "compose", "up", "-d"], True),
+    ],
+)
+def test_maintenance_services_toggles_compose_services(
+    status_stdout: str,
+    expected_command: list[str],
+    expected_running: bool,
+    log_server: tuple[ModuleType, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module, base_url = log_server
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+        calls.append(command)
+        stdout = status_stdout if command == ["docker", "compose", "ps", "-q"] else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout)
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    request = urllib.request.Request(
+        f"{base_url}/maintenance/services",
+        data=b"",
+        headers={"X-Ottobot-Action": "maintenance-services"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request) as response:
+        assert response.status == 200
+        assert json.load(response) == {"running": expected_running}
+
+    assert calls == [["docker", "compose", "ps", "-q"], expected_command]
+
+
+def test_maintenance_services_rejects_missing_action_header(
+    log_server: tuple[ModuleType, str],
+) -> None:
+    _, base_url = log_server
+    request = urllib.request.Request(
+        f"{base_url}/maintenance/services", data=b"", method="POST"
+    )
+
+    assert_json_error(request, 400, {"error": "Missing maintenance action header"})
+
+
 def test_maintenance_update_endpoint_starts_an_update(
     log_server: tuple[ModuleType, str],
     monkeypatch: pytest.MonkeyPatch,
