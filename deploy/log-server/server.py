@@ -72,6 +72,10 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_update_status()
             return
 
+        if parsed.path == "/maintenance/services":
+            self.handle_maintenance_services_status()
+            return
+
         if parsed.path == "/events":
             query = urllib.parse.parse_qs(parsed.query)
             service = query.get("service", [""])[0].strip()
@@ -89,6 +93,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if parsed.path == "/maintenance/update":
             self.handle_update()
+            return
+
+        if parsed.path == "/maintenance/services":
+            self.handle_maintenance_services()
             return
 
         self.send_error(404)
@@ -194,6 +202,53 @@ class Handler(BaseHTTPRequestHandler):
             state = UPDATE_STATE.copy()
 
         self.send_json(200, state)
+
+    def handle_maintenance_services_status(self):
+        try:
+            running = compose_services_are_running()
+        except (OSError, subprocess.SubprocessError):
+            self.send_json(503, {"error": "Unable to determine Docker service status"})
+            return
+
+        self.send_json(200, {"running": running})
+
+    def handle_maintenance_services(self):
+        if self.headers.get("X-Ottobot-Action") != "maintenance-services":
+            self.send_json(400, {"error": "Missing maintenance action header"})
+            return
+
+        was_running = None
+
+        try:
+            was_running = compose_services_are_running()
+            command = (
+                ["docker", "compose", "down"]
+                if was_running
+                else [
+                    "docker",
+                    "compose",
+                    "up",
+                    "-d",
+                ]
+            )
+            subprocess.run(
+                command,
+                cwd=BASE_DIR,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            action = (
+                "manage"
+                if was_running is None
+                else ("stop" if was_running else "start")
+            )
+            self.send_json(500, {"error": f"Unable to {action} Docker services"})
+            return
+
+        self.send_json(200, {"running": not was_running})
 
     def handle_update(self):
         if self.headers.get("X-Ottobot-Action") != "maintenance-update":
@@ -352,6 +407,18 @@ FAVICON_SVG = b"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 
 def host_is_local_only():
     return HOST in ("127.0.0.1", "localhost", "::1")
+
+
+def compose_services_are_running():
+    result = subprocess.run(
+        ["docker", "compose", "ps", "-q"],
+        cwd=BASE_DIR,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return bool(result.stdout.strip())
 
 
 def run_maintenance_update():

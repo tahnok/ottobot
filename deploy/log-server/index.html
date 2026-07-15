@@ -52,6 +52,16 @@
             border-color: #8a7438;
         }
 
+        #maintenance[data-running="true"] {
+            color: #ff8b8b;
+            border-color: #8f4747;
+        }
+
+        #maintenance[data-running="false"] {
+            color: #6fda7b;
+            border-color: #477f4d;
+        }
+
         select {
             min-width: 0;
             max-width: 100%;
@@ -121,13 +131,18 @@
                 width: 100%;
             }
 
-            #update {
+            #maintenance {
                 grid-column: 1;
                 grid-row: 2;
             }
 
+            #update {
+                grid-column: 2;
+                grid-row: 2;
+            }
+
             .status {
-                grid-column: 2 / -1;
+                grid-column: 3 / -1;
                 grid-row: 2;
                 justify-self: end;
                 margin-left: 0;
@@ -157,7 +172,8 @@
 
         <button id="clear">Clear</button>
         <button id="pause">Pause</button>
-        <button id="update">Run update</button>
+        <button id="maintenance" disabled>Docker start / stop</button>
+        <button id="update">Docker update</button>
         <span class="update-status" id="update-status" aria-live="polite"></span>
 
         <span class="status" id="status" data-state="connecting">Connecting...</span>
@@ -173,6 +189,7 @@
         const service = document.getElementById('service');
         const clear = document.getElementById('clear');
         const pause = document.getElementById('pause');
+        const maintenance = document.getElementById('maintenance');
         const update = document.getElementById('update');
         const updateStatus = document.getElementById('update-status');
 
@@ -182,6 +199,8 @@
         let updateWasRunning = false;
         let uptimeTimer = null;
         let containerStartedAt = null;
+        let maintenanceRunning = null;
+        let maintenanceBusy = false;
 
         function formatUptime(milliseconds) {
             const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -313,20 +332,20 @@
 
             const updateLog = document.createElement('option');
             updateLog.value = '__ottobot_update_log__';
-            updateLog.textContent = 'Ottobot update log';
+            updateLog.textContent = 'Docker update log';
             service.appendChild(updateLog);
         }
 
         function showUpdateState(state) {
             update.disabled = state.running;
-            update.textContent = state.running ? 'Updating...' : 'Run update';
+            update.textContent = state.running ? 'Docker updating...' : 'Docker update';
 
             if (state.running) {
-                updateStatus.textContent = 'Maintenance update in progress';
+                updateStatus.textContent = 'Docker update in progress';
             } else if (updateWasRunning && state.last_exit_code === 0) {
-                updateStatus.textContent = 'Update completed';
+                updateStatus.textContent = 'Docker update completed';
             } else if (updateWasRunning && state.last_exit_code !== null) {
-                updateStatus.textContent = 'Update failed; check the update log';
+                updateStatus.textContent = 'Docker update failed; check the update log';
             }
 
             updateWasRunning = state.running;
@@ -343,6 +362,30 @@
                 // Keep the log connection usable if status polling fails.
             } finally {
                 window.setTimeout(refreshUpdateState, 2000);
+            }
+        }
+
+        function showMaintenanceState(state) {
+            maintenanceRunning = state.running;
+            maintenance.disabled = maintenanceBusy;
+            maintenance.dataset.running = String(state.running);
+
+            if (!maintenanceBusy) {
+                maintenance.textContent = state.running ? 'Docker stop' : 'Docker start';
+            }
+        }
+
+        async function refreshMaintenanceState() {
+            try {
+                const response = await fetch('/maintenance/services');
+
+                if (response.ok) {
+                    showMaintenanceState(await response.json());
+                }
+            } catch {
+                // Keep the log connection usable if Docker status lookup fails.
+            } finally {
+                window.setTimeout(refreshMaintenanceState, 2000);
             }
         }
 
@@ -364,13 +407,54 @@
             }
         });
 
+        maintenance.addEventListener('click', async () => {
+            if (maintenanceRunning === null) {
+                return;
+            }
+
+            const action = maintenanceRunning ? 'stop' : 'start';
+
+            if (!window.confirm(`Are you sure you want to ${action} the Docker services?`)) {
+                return;
+            }
+
+            maintenanceBusy = true;
+            maintenance.disabled = true;
+            maintenance.textContent = maintenanceRunning ? 'Stopping...' : 'Starting...';
+            updateStatus.textContent = `${action === 'stop' ? 'Stopping' : 'Starting'} Docker services...`;
+
+            try {
+                const response = await fetch('/maintenance/services', {
+                    method: 'POST',
+                    headers: {'X-Ottobot-Action': 'maintenance-services'},
+                });
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || `Unable to ${action} Docker services`);
+                }
+
+                maintenanceBusy = false;
+                showMaintenanceState(result);
+                updateStatus.textContent = `Docker services ${result.running ? 'started' : 'stopped'}`;
+                service.value = '';
+                logs.textContent = '';
+                buffer = [];
+                connect();
+            } catch (error) {
+                maintenanceBusy = false;
+                maintenance.disabled = false;
+                updateStatus.textContent = error.message;
+            }
+        });
+
         update.addEventListener('click', async () => {
-            if (!window.confirm('Are you sure you want to run the Ottobot maintenance update now?')) {
+            if (!window.confirm('Are you sure you want to update Docker now?')) {
                 return;
             }
 
             update.disabled = true;
-            updateStatus.textContent = 'Starting update...';
+            updateStatus.textContent = 'Starting Docker update...';
 
             try {
                 const response = await fetch('/maintenance/update', {
@@ -380,7 +464,7 @@
                 const result = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(result.error || 'Unable to start update');
+                    throw new Error(result.error || 'Unable to start Docker update');
                 }
 
                 showUpdateState(result);
@@ -402,6 +486,7 @@
 
         loadServices().finally(connect);
         refreshUpdateState();
+        refreshMaintenanceState();
     </script>
 </body>
 </html>
