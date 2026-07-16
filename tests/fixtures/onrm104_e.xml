@@ -11,18 +11,18 @@ See https://www.canada.ca/en/environment-climate-change/services/weather-general
   <name>Environment Canada</name>
   <uri>https://weather.gc.ca</uri>
 </author>
-<updated>2026-07-04T09:28:26Z</updated>
-<id>tag:weather.gc.ca,2013-04-16:20260704092826</id>
+<updated>2026-07-15T20:24:02Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20260715202402</id>
 <logo>https://weather.gc.ca/cacheable/images/img/wmms-alt.png</logo>
 <icon>https://weather.gc.ca/template/gcweb/v15.0.0/GCWeb/assets/favicon.ico</icon>
 <rights>Copyright 2026, Environment Canada</rights>
 <entry>
   <title>No alerts in effect, Ottawa North - Kanata - Orléans</title>
   <link type="text/html" href="https://weather.gc.ca/warnings/report_e.html?onrm104"/>
-  <updated>2026-07-04T09:28:26Z</updated>
-  <published>2026-07-04T09:28:26Z</published>
+  <updated>2026-07-15T20:24:02Z</updated>
+  <published>2026-07-15T20:24:02Z</published>
   <category term="Alerts"/>
   <summary type="html">No alerts in effect.</summary>
-  <id>tag:weather.gc.ca,2013-04-16:20260704092826</id>
+  <id>tag:weather.gc.ca,2013-04-16:20260715202402</id>
 </entry>
 </feed>

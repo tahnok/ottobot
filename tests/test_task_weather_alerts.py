@@ -11,11 +11,27 @@ from ottobot.context import TaskContext
 from ottobot.registry import module_tasks
 from ottobot.tasks import weather_alerts as alerts_mod
 
-# A real response from Environment Canada's battleboard alerts feed,
-# captured 2026-07-04.
-FIXTURE_FEED = (Path(__file__).parent / "fixtures" / "onrm104_e.xml").read_text(
-    encoding="utf-8"
-)
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
+
+# A real, live response from Environment Canada's battleboard alerts feed,
+# captured 2026-07-16: `onrm104_e.xml` is the body and `onrm104_e.headers`
+# the HTTP headers the server actually sent for the app's real
+# (gzip-accepting) request — the two are a matched pair.
+FIXTURE_FEED = (FIXTURE_DIR / "onrm104_e.xml").read_text(encoding="utf-8")
+
+
+def load_headers(name: str) -> dict[str, str]:
+    """Parse a saved raw-HTTP-header fixture into a case-preserving dict."""
+    headers: dict[str, str] = {}
+    for line in (FIXTURE_DIR / name).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        key, _, value = line.partition(":")
+        headers[key.strip()] = value.strip()
+    return headers
+
+
+FIXTURE_HEADERS = load_headers("onrm104_e.headers")
 
 # A trimmed real response from Environment Canada's alerts feed.
 FEED = """<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
@@ -121,7 +137,7 @@ class TestParseAlerts:
     def test_parses_real_battleboard_feed(self) -> None:
         assert alerts_mod.parse_alerts(FIXTURE_FEED) == [
             (
-                "tag:weather.gc.ca,2013-04-16:20260704092826",
+                "tag:weather.gc.ca,2013-04-16:20260715202402",
                 "No alerts in effect",
             )
         ]
@@ -295,7 +311,7 @@ class TestWeatherAlertsTask:
         replies: list[str] = []
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == ["No alerts in effect"]
-        assert alerts_mod._seen == {"tag:weather.gc.ca,2013-04-16:20260704092826"}
+        assert alerts_mod._seen == {"tag:weather.gc.ca,2013-04-16:20260715202402"}
 
     async def test_no_active_alerts_primes_to_empty(
         self, monkeypatch: pytest.MonkeyPatch
@@ -310,10 +326,11 @@ class TestWeatherAlertsTask:
 
 
 class TestConditionalFetch:
-    HEADERS = {
-        "ETag": 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk"',
-        "Last-Modified": "Fri, 10 Jul 2026 13:30:19 GMT",
-    }
+    # The real headers Environment Canada returned with the captured feed.
+    HEADERS = FIXTURE_HEADERS
+    # Apache serves the ETag with a `-gzip` suffix it then won't match, so
+    # the validator the bot stores and echoes back is the stripped form.
+    NORMALIZED_ETAG = 'W/"5dc-lmlFbrdpzI/znMNh1j/xi8VKRXc"'
 
     async def test_first_fetch_is_unconditional(
         self, monkeypatch: pytest.MonkeyPatch
@@ -325,22 +342,22 @@ class TestConditionalFetch:
     async def test_validators_from_response_are_sent_back(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        fake_httpx_client(monkeypatch, text=FEED, response_headers=self.HEADERS)
+        fake_httpx_client(monkeypatch, text=FIXTURE_FEED, response_headers=self.HEADERS)
         await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._etag == self.HEADERS["ETag"]
+        assert alerts_mod._etag == self.NORMALIZED_ETAG
         assert alerts_mod._last_modified == self.HEADERS["Last-Modified"]
 
-        client = fake_httpx_client(monkeypatch, text=FEED)
+        client = fake_httpx_client(monkeypatch, text=FIXTURE_FEED)
         await alerts_mod.weather_alerts(make_ctx([]))
         assert client.request_headers == {
-            "If-None-Match": self.HEADERS["ETag"],
+            "If-None-Match": self.NORMALIZED_ETAG,
             "If-Modified-Since": self.HEADERS["Last-Modified"],
         }
 
     async def test_not_modified_announces_nothing_and_keeps_state(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        fake_httpx_client(monkeypatch, text=FEED, response_headers=self.HEADERS)
+        fake_httpx_client(monkeypatch, text=FIXTURE_FEED, response_headers=self.HEADERS)
         await alerts_mod.weather_alerts(make_ctx([]))  # priming run
         seen_before = set(alerts_mod._seen)
 
@@ -349,20 +366,22 @@ class TestConditionalFetch:
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
         assert alerts_mod._seen == seen_before
-        assert alerts_mod._etag == self.HEADERS["ETag"]
+        assert alerts_mod._etag == self.NORMALIZED_ETAG
 
     async def test_apache_gzip_etag_suffix_is_stripped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Apache's mod_deflate serves W/"...-gzip" ETags it then refuses to
-        # match; the stored validator must be the stripped form.
+        # match; the stored validator must be the stripped form. The real
+        # captured response genuinely carries that suffix.
+        assert self.HEADERS["ETag"].endswith('-gzip"')
         fake_httpx_client(
             monkeypatch,
-            text=FEED,
-            response_headers={"ETag": 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk-gzip"'},
+            text=FIXTURE_FEED,
+            response_headers={"ETag": self.HEADERS["ETag"]},
         )
         await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._etag == 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk"'
+        assert alerts_mod._etag == self.NORMALIZED_ETAG
 
     def test_normalize_etag_leaves_plain_etags_alone(self) -> None:
         assert alerts_mod.normalize_etag('W/"abc"') == 'W/"abc"'

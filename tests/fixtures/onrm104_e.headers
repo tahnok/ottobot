@@ -1,0 +1,10 @@
+Server: Apache
+Strict-Transport-Security: max-age=63072000; preload
+Content-Type: text/xml; charset=utf-8
+Cache-Control: max-age=60,must-revalidate
+Last-Modified: Wed, 15 Jul 2026 20:24:02 GMT
+Expires: Wed, 15 Jul 2026 20:25:02 GMT
+ETag: W/"5dc-lmlFbrdpzI/znMNh1j/xi8VKRXc-gzip"
+Vary: Accept-Encoding
+Content-Encoding: gzip
+Content-Length: 698
