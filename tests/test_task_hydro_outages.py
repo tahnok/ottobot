@@ -61,12 +61,24 @@ def ward_report(*areas: tuple[str, int, int]) -> dict:
 @pytest.fixture(autouse=True)
 def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(outages_mod, "_last_updated_at", None)
+    monkeypatch.setattr(outages_mod, "_state_last_modified", None)
     monkeypatch.setattr(outages_mod, "_announced_customers", None)
 
 
+# Sentinel response value: reply with a bodyless 304 Not Modified.
+NOT_MODIFIED = object()
+
+
 class FakeResponse:
-    def __init__(self, data: Any) -> None:
+    def __init__(
+        self,
+        data: Any = None,
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self._data = data
+        self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self) -> None:
         pass
@@ -78,9 +90,16 @@ class FakeResponse:
 class FakeClient:
     """Serves canned JSON per URL; an Exception value is raised instead."""
 
-    def __init__(self, responses: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        responses: dict[str, Any],
+        response_headers: dict[str, str] | None = None,
+    ) -> None:
         self.responses = responses
+        self.response_headers = response_headers or {}
         self.requested: list[str] = []
+        # Request headers by URL, recorded as each fetch happens.
+        self.request_headers: dict[str, dict[str, str]] = {}
 
     async def __aenter__(self) -> "FakeClient":
         return self
@@ -88,20 +107,27 @@ class FakeClient:
     async def __aexit__(self, *exc: object) -> None:
         return None
 
-    async def get(self, url: str) -> FakeResponse:
+    async def get(
+        self, url: str, headers: dict[str, str] | None = None
+    ) -> FakeResponse:
         self.requested.append(url)
+        self.request_headers[url] = headers or {}
         if url not in self.responses:
             raise AssertionError(f"unexpected fetch: {url}")
         data = self.responses[url]
         if isinstance(data, Exception):
             raise data
-        return FakeResponse(data)
+        if data is NOT_MODIFIED:
+            return FakeResponse(status_code=304)
+        return FakeResponse(data, headers=self.response_headers)
 
 
 def fake_httpx_client(
-    monkeypatch: pytest.MonkeyPatch, responses: dict[str, Any]
+    monkeypatch: pytest.MonkeyPatch,
+    responses: dict[str, Any],
+    response_headers: dict[str, str] | None = None,
 ) -> FakeClient:
-    client = FakeClient(responses)
+    client = FakeClient(responses, response_headers)
     monkeypatch.setattr(outages_mod.httpx, "AsyncClient", lambda **_: client)
     return client
 
@@ -140,9 +166,15 @@ class TestVal:
     def test_plain_number_passes_through(self) -> None:
         assert outages_mod._val(4) == 4
 
-    def test_none_and_empty_are_zero(self) -> None:
-        assert outages_mod._val(None) == 0
-        assert outages_mod._val({}) == 0
+    def test_missing_or_null_values_raise(self) -> None:
+        # A zero invented from absent data could announce a bogus
+        # all-clear; missing fields must fail the poll instead.
+        with pytest.raises(ValueError):
+            outages_mod._val(None)
+        with pytest.raises(ValueError):
+            outages_mod._val({})
+        with pytest.raises(ValueError):
+            outages_mod._val({"val": None})
 
 
 class TestAffectedAreas:
@@ -399,3 +431,79 @@ class TestHydroOutagesTask:
             snapshot_responses(customers=800, outages=1, areas=(("Somerset", 1, 800),)),
         )
         assert await outages_mod.hydro_outages(make_ctx()) is not None
+
+    async def test_summary_missing_customer_count_fails_the_poll(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # An API change that drops total_cust_a must not read as "0
+        # customers out" (which could fire a bogus all-clear); the poll
+        # fails and the snapshot stays unprocessed.
+        responses = snapshot_responses(customers=800, outages=2)
+        broken = summary(customers=800, outages=2)
+        del broken["summaryFileData"]["totals"][0]["total_cust_a"]
+        responses[outages_mod.summary_url("data/guid-1")] = broken
+        fake_httpx_client(monkeypatch, responses)
+        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert outages_mod._last_updated_at is None
+        assert outages_mod._announced_customers is None
+
+
+class TestConditionalFetch:
+    LAST_MODIFIED = {"Last-Modified": "Thu, 16 Jul 2026 11:19:47 GMT"}
+
+    async def test_first_fetch_is_unconditional(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = fake_httpx_client(monkeypatch, snapshot_responses(customers=200))
+        await outages_mod.hydro_outages(make_ctx())
+        assert client.request_headers[outages_mod.CURRENT_STATE_URL] == {}
+
+    async def test_last_modified_is_sent_back(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_httpx_client(
+            monkeypatch,
+            snapshot_responses(customers=200),
+            response_headers=self.LAST_MODIFIED,
+        )
+        await outages_mod.hydro_outages(make_ctx())
+        assert outages_mod._state_last_modified == self.LAST_MODIFIED["Last-Modified"]
+
+        client = fake_httpx_client(monkeypatch, snapshot_responses(customers=200))
+        await outages_mod.hydro_outages(make_ctx())
+        assert client.request_headers[outages_mod.CURRENT_STATE_URL] == {
+            "If-Modified-Since": self.LAST_MODIFIED["Last-Modified"]
+        }
+
+    async def test_not_modified_fetches_nothing_downstream(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_httpx_client(
+            monkeypatch,
+            snapshot_responses(customers=200),
+            response_headers=self.LAST_MODIFIED,
+        )
+        await outages_mod.hydro_outages(make_ctx())
+
+        client = fake_httpx_client(
+            monkeypatch, {outages_mod.CURRENT_STATE_URL: NOT_MODIFIED}
+        )
+        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert client.requested == [outages_mod.CURRENT_STATE_URL]
+        assert outages_mod._state_last_modified == self.LAST_MODIFIED["Last-Modified"]
+
+    async def test_validator_is_only_kept_after_a_successful_poll(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A failed downstream fetch must leave the next poll unconditional,
+        # so the snapshot can't get stuck behind 304s.
+        fake_httpx_client(
+            monkeypatch,
+            {
+                outages_mod.CURRENT_STATE_URL: current_state(),
+                outages_mod.summary_url("data/guid-1"): RuntimeError("boom"),
+            },
+            response_headers=self.LAST_MODIFIED,
+        )
+        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert outages_mod._state_last_modified is None

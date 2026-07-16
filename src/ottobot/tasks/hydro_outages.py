@@ -21,9 +21,15 @@ packed to at most ``MAX_MESSAGE_LEN`` UTF-8 bytes (bytes, not characters —
 ward names like "Orléans" are not pure ASCII): as many of the worst-hit
 wards as fit are listed, the rest folded into "+N more".
 
-State (last seen ``updatedAt``, last announced size) lives in memory only;
-a restart just means one full fetch, and an ongoing significant outage is
-announced once on startup.
+To be nice to KUBRA's servers, the ``currentState`` poll is conditional:
+kubra.io sends no ETag but honors ``If-Modified-Since`` (verified
+2026-07-16), so an unchanged pointer costs a single 304 with no body. The
+snapshot files themselves are immutable and content-addressed — each one is
+fetched at most once — so no validators are needed for them.
+
+State (last seen ``updatedAt``, the ``Last-Modified`` validator, last
+announced size) lives in memory only; a restart just means one full fetch,
+and an ongoing significant outage is announced once on startup.
 """
 
 from __future__ import annotations
@@ -65,6 +71,9 @@ MAX_MESSAGE_LEN = 140
 
 # currentState.updatedAt of the last fully processed snapshot.
 _last_updated_at: int | None = None
+# Last-Modified from the currentState response of that snapshot, sent back
+# as If-Modified-Since so an unchanged pointer is a bodyless 304.
+_state_last_modified: str | None = None
 # Customers affected when we last announced; None = no active announcement.
 _announced_customers: int | None = None
 
@@ -78,10 +87,18 @@ def ward_report_url(interval_path: str) -> str:
 
 
 def _val(value: Any) -> int:
-    """Unwrap KUBRA's ``{"val": n}`` wrappers; plain numbers pass through."""
+    """Unwrap KUBRA's ``{"val": n}`` wrappers; plain numbers pass through.
+
+    Missing or null values raise rather than default to 0 — a zero conjured
+    out of absent data could fire a bogus all-clear or hide a real outage.
+    The raise trips the task's catch-all, so the poll is logged as a failure
+    and retried instead of announcing nonsense.
+    """
     if isinstance(value, dict):
         value = value.get("val")
-    return int(value or 0)
+    if value is None:
+        raise ValueError("missing numeric value in KUBRA outage data")
+    return int(value)
 
 
 def short_ward_name(name: str) -> str:
@@ -149,12 +166,21 @@ async def _get_json(client: httpx.AsyncClient, url: str) -> Any:
     help="Announce significant Hydro Ottawa power outages",
 )
 async def hydro_outages(ctx: TaskContext) -> str | None:
-    global _last_updated_at, _announced_customers
+    global _last_updated_at, _state_last_modified, _announced_customers
+    headers = {}
+    if _state_last_modified is not None:
+        headers["If-Modified-Since"] = _state_last_modified
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            state = await _get_json(client, CURRENT_STATE_URL)
+            response = await client.get(CURRENT_STATE_URL, headers=headers)
+            if response.status_code == 304:
+                return None
+            response.raise_for_status()
+            state = response.json()
+            state_last_modified = response.headers.get("Last-Modified")
             updated_at = state.get("updatedAt")
             if updated_at is not None and updated_at == _last_updated_at:
+                _state_last_modified = state_last_modified
                 return None
             interval_path = state["data"]["interval_generation_data"]
 
@@ -188,7 +214,9 @@ async def hydro_outages(ctx: TaskContext) -> str | None:
         logger.warning("failed to fetch Hydro Ottawa outage data", exc_info=True)
         return None
 
-    # Only mark the snapshot processed once everything above succeeded, so a
-    # failed downstream fetch is retried on the next poll.
+    # Only mark the snapshot processed (and keep its validator) once
+    # everything above succeeded, so a failed downstream fetch is retried
+    # unconditionally on the next poll.
     _last_updated_at = updated_at
+    _state_last_modified = state_last_modified
     return announcement
