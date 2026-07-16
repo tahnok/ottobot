@@ -84,6 +84,10 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .log-line.filtered {
+            display: none;
+        }
+
         .status {
             margin-left: auto;
             min-width: 0;
@@ -128,22 +132,40 @@
             }
 
             #service {
+                grid-column: 2 / -1;
+                grid-row: 1;
                 width: 100%;
+            }
+
+            #level {
+                grid-column: 1 / span 2;
+                grid-row: 2;
+                width: 100%;
+            }
+
+            #clear {
+                grid-column: 3;
+                grid-row: 2;
+            }
+
+            #pause {
+                grid-column: 4;
+                grid-row: 2;
             }
 
             #maintenance {
                 grid-column: 1;
-                grid-row: 2;
+                grid-row: 3;
             }
 
             #update {
                 grid-column: 2;
-                grid-row: 2;
+                grid-row: 3;
             }
 
             .status {
                 grid-column: 3 / -1;
-                grid-row: 2;
+                grid-row: 3;
                 justify-self: end;
                 margin-left: 0;
                 text-align: right;
@@ -151,7 +173,7 @@
 
             .update-status {
                 grid-column: 1 / -1;
-                grid-row: 3;
+                grid-row: 4;
                 margin-left: 0;
                 white-space: normal;
             }
@@ -168,6 +190,15 @@
 
         <select id="service">
             <option value="">All Docker services</option>
+        </select>
+
+        <select id="level" title="Show this log level and above">
+            <option value="">All levels</option>
+            <option value="DEBUG">Debug+</option>
+            <option value="INFO">Info+</option>
+            <option value="WARNING">Warning+</option>
+            <option value="ERROR">Error+</option>
+            <option value="CRITICAL">Critical</option>
         </select>
 
         <button id="clear">Clear</button>
@@ -187,15 +218,27 @@
         const logs = document.getElementById('logs');
         const status = document.getElementById('status');
         const service = document.getElementById('service');
+        const level = document.getElementById('level');
         const clear = document.getElementById('clear');
         const pause = document.getElementById('pause');
         const maintenance = document.getElementById('maintenance');
         const update = document.getElementById('update');
         const updateStatus = document.getElementById('update-status');
 
+        // Python's logging format is "<time> <LEVEL> <name>: <message>", so a
+        // level token sits right after a HH:MM:SS[,.]mmm clock. Anchoring to the
+        // clock keeps words like "ERROR" inside a message from being mistaken
+        // for the line's level. Docker prefixes each line with the service
+        // name, which this happily skips over.
+        const LEVEL_RE = /\d{2}:\d{2}:\d{2}[.,]\d+\s+(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b/;
+        const LEVEL_RANK = {DEBUG: 10, INFO: 20, WARNING: 30, ERROR: 40, CRITICAL: 50};
+
         let source = null;
         let paused = false;
         let buffer = [];
+        // Level carried onto continuation lines (tracebacks, etc.) that have no
+        // level token of their own, so they stay with their record when filtering.
+        let lastLevel = '';
         let updateWasRunning = false;
         let uptimeTimer = null;
         let containerStartedAt = null;
@@ -264,6 +307,41 @@
             }
         }
 
+        function levelFor(line) {
+            const match = LEVEL_RE.exec(line);
+
+            if (match) {
+                lastLevel = match[1];
+                return match[1];
+            }
+
+            // A line with no level of its own (e.g. a traceback) belongs to the
+            // preceding record, so inherit its level.
+            return lastLevel;
+        }
+
+        function isHidden(lineLevel) {
+            if (!level.value) {
+                return false;
+            }
+
+            // Lines we couldn't classify (no level, no record to inherit from)
+            // are hidden once a level filter is active.
+            if (!lineLevel) {
+                return true;
+            }
+
+            return LEVEL_RANK[lineLevel] < LEVEL_RANK[level.value];
+        }
+
+        function applyFilter() {
+            for (const logLine of logs.children) {
+                logLine.classList.toggle('filtered', isHidden(logLine.dataset.level));
+            }
+
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
         function appendLine(line) {
             if (paused) {
                 buffer.push(line);
@@ -272,9 +350,18 @@
 
             const logLine = document.createElement('span');
             logLine.className = 'log-line';
+            logLine.dataset.level = levelFor(line);
             logLine.textContent = line;
+
+            if (isHidden(logLine.dataset.level)) {
+                logLine.classList.add('filtered');
+            }
+
             logs.appendChild(logLine);
-            window.scrollTo(0, document.body.scrollHeight);
+
+            if (!logLine.classList.contains('filtered')) {
+                window.scrollTo(0, document.body.scrollHeight);
+            }
         }
 
         function connect() {
@@ -392,7 +479,10 @@
         clear.addEventListener('click', () => {
             logs.textContent = '';
             buffer = [];
+            lastLevel = '';
         });
+
+        level.addEventListener('change', applyFilter);
 
         pause.addEventListener('click', () => {
             paused = !paused;
@@ -440,6 +530,7 @@
                 service.value = '';
                 logs.textContent = '';
                 buffer = [];
+                lastLevel = '';
                 connect();
             } catch (error) {
                 maintenanceBusy = false;
@@ -471,6 +562,7 @@
                 service.value = '__ottobot_update_log__';
                 logs.textContent = '';
                 buffer = [];
+                lastLevel = '';
                 connect();
             } catch (error) {
                 update.disabled = false;
@@ -481,6 +573,7 @@
         service.addEventListener('change', () => {
             logs.textContent = '';
             buffer = [];
+            lastLevel = '';
             connect();
         });
 
