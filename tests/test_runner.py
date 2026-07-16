@@ -7,6 +7,7 @@ from meshcore import EventType
 from meshcore.events import Event
 
 from ottobot import Context, Ottobot, TaskContext
+from ottobot import runner as runner_module
 from ottobot.channels import PUBLIC, ChannelConfig
 from ottobot.config import BotConfig
 from ottobot.radio import RADIO
@@ -16,6 +17,14 @@ from ottobot.runner import (
     apply_settings,
     fetch_channels,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_send_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Real transmissions are spaced apart (SEND_SPACING_SECONDS); drop that
+    # to zero so the suite doesn't wait seconds between sends. The one test
+    # that exercises the spacing opts back in.
+    monkeypatch.setattr(runner_module, "SEND_SPACING_SECONDS", 0.0)
 
 
 class FakeEvent(Event):
@@ -466,6 +475,28 @@ class TestScheduledTasks:
         await runner.stop()
         assert mc.commands.sent_chan_msgs == [(0, "fine")]
         assert any("boom" in r.message for r in caplog.records)
+
+    async def test_multiple_replies_are_spaced_apart(
+        self, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A task announcing several messages must not fire them back-to-back:
+        # the radio is still transmitting the first, so the second would
+        # collide and be lost. The second send waits for the spacing gap.
+        monkeypatch.setattr(runner_module, "SEND_SPACING_SECONDS", 0.2)
+        public = ChannelConfig(index=0, name="public")
+        bot = task_bot(public)
+
+        @bot.task("two", interval=timedelta(hours=1), channel=public)
+        async def two(ctx: TaskContext) -> None:
+            await ctx.reply_many(["first", "second"])
+
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)  # within the gap
+        assert mc.commands.sent_chan_msgs == [(0, "first")]
+        await asyncio.sleep(0.3)  # past the gap
+        assert mc.commands.sent_chan_msgs == [(0, "first"), (0, "second")]
+        await runner.stop()
 
     async def test_stop_cancels_scheduled_tasks(
         self, bot: Ottobot, mc: FakeMeshCore

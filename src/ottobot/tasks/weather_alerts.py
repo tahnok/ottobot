@@ -3,7 +3,8 @@
 Environment Canada publishes an Atom "battleboard" feed of currently
 active weather alerts (warnings, watches, statements) per region. Every 10
 minutes the feed is fetched and any alert not seen on a previous fetch is
-announced. The very first fetch only records what's already active — it
+announced, one message per new alert. The very first
+fetch only records what's already active — it
 doesn't announce ongoing alerts the bot just happened to start during — so
 only newly issued alerts are ever announced. Alerts go out on the
 "#ott-alerts" channel, one of the configured channels (ottobot.channels).
@@ -26,6 +27,7 @@ restart just means one unconditional fetch to re-prime them.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from xml.etree import ElementTree
 
@@ -44,7 +46,14 @@ _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 # to save mesh bandwidth.
 _TITLE_SUFFIX = ", Ottawa North - Kanata - Orléans"
 
-# ids of alerts already announced or seen on the priming run.
+# The battleboard packs active alerts into numbered slots (onrm104_w1,
+# onrm104_w2, …) ordered newest-first, and an entry's <id> embeds its slot.
+# So when a new alert is issued the older ones shift down a slot and their
+# ids change — a reshuffle that must not look like a brand-new alert.
+_SLOT_RE = re.compile(r"_w\d+(?=:)")
+
+# Stable, slot-independent keys of alerts already announced or seen on the
+# priming run.
 _seen: set[str] = set()
 _primed = False
 
@@ -65,6 +74,18 @@ def normalize_etag(etag: str) -> str:
     if etag.endswith('-gzip"'):
         return etag[: -len('-gzip"')] + '"'
     return etag
+
+
+def alert_key(alert_id: str) -> str:
+    """Identify an alert independently of the feed slot it currently occupies.
+
+    Dropping the `_wN` slot marker leaves the region and issue timestamp,
+    which stay put when other alerts come and go — so an ongoing alert that
+    merely shifted slots isn't mistaken for a new one. A genuine re-issue
+    changes the timestamp and so is still announced again. The "no alerts"
+    all-clear entry has no slot marker and is returned unchanged.
+    """
+    return _SLOT_RE.sub("", alert_id)
 
 
 def parse_alerts(xml_text: str) -> list[tuple[str, str]]:
@@ -114,16 +135,17 @@ async def weather_alerts(ctx: TaskContext) -> None:
         return
 
     if not _primed:
-        _seen.update(alert_id for alert_id, _ in alerts)
+        _seen.update(alert_key(alert_id) for alert_id, _ in alerts)
         _primed = True
         return
 
-    new_alerts = [pair for pair in alerts if pair[0] not in _seen]
-    for alert_id, title in reversed(new_alerts):
-        _seen.add(alert_id)
-        await ctx.reply(title)
-    # Drop ids that have left the feed so _seen doesn't grow forever on a
-    # long-running bot. Ids embed their issue timestamp, so an ended
-    # alert's id doesn't come back; a genuinely re-issued alert gets a
-    # fresh id and is announced again.
-    _seen.intersection_update(alert_id for alert_id, _ in alerts)
+    new_alerts = [pair for pair in alerts if alert_key(pair[0]) not in _seen]
+    _seen.update(alert_key(alert_id) for alert_id, _ in new_alerts)
+    # Several alerts can be published in a single fetch; announce each on its
+    # own line/packet, oldest-first (the feed lists newest first).
+    await ctx.reply_many(title for _, title in reversed(new_alerts))
+    # Drop keys that have left the feed so _seen doesn't grow forever on a
+    # long-running bot. Keys embed their issue timestamp, so an ended
+    # alert's key doesn't come back; a genuinely re-issued alert gets a
+    # fresh key and is announced again.
+    _seen.intersection_update(alert_key(alert_id) for alert_id, _ in alerts)

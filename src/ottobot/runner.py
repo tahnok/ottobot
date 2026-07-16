@@ -42,6 +42,14 @@ PUBLIC_CHANNEL_KEY = bytes.fromhex("8b3387e9c5cdea6ac9e5edbaa115cd72")
 # rate on busier meshes.
 PATH_HASH_MODE_2_BYTE = 1
 
+# Minimum gap between two channel transmissions, in seconds. send_chan_msg
+# returns as soon as the firmware has *queued* a message, not when the radio
+# has finished putting it on the air — which takes up to ~0.5 s at the
+# configured preset (SF7/BW62.5). Firing the next send right away makes the
+# two collide and one is silently lost (seen when a task announces several
+# alerts at once), so sends are serialized and held this far apart.
+SEND_SPACING_SECONDS = 2.0
+
 
 class _Commands(Protocol):
     """The ``mc.commands`` methods the runner calls."""
@@ -174,6 +182,10 @@ class MeshCoreRunner:
         self.mc = meshcore
         self._subscriptions: list[Subscription] = []
         self._scheduled_tasks: list[asyncio.Task[None]] = []
+        # Serializes device transmissions and tracks when the last one went
+        # out, so back-to-back sends are spaced (see SEND_SPACING_SECONDS).
+        self._send_lock = asyncio.Lock()
+        self._last_send_at: float | None = None
 
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
@@ -240,6 +252,26 @@ class MeshCoreRunner:
         if result is not None:
             await broadcast(result)
 
+    async def _send_chan_msg(self, channel_idx: int, text: str) -> Event:
+        """Transmit one channel message, serialized and spaced from the last.
+
+        send_chan_msg's OK only means the firmware queued the message, not
+        that the radio finished transmitting it. Two sends fired back-to-back
+        collide on the air and one is silently dropped, so hold a lock and
+        wait out the rest of SEND_SPACING_SECONDS since the previous send
+        before starting the next.
+        """
+        async with self._send_lock:
+            if self._last_send_at is not None:
+                elapsed = asyncio.get_running_loop().time() - self._last_send_at
+                remaining = SEND_SPACING_SECONDS - elapsed
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+            try:
+                return await self.mc.commands.send_chan_msg(channel_idx, text)
+            finally:
+                self._last_send_at = asyncio.get_running_loop().time()
+
     async def _broadcast(self, text: str, channel: ChannelConfig) -> None:
         """Send *text* on *channel*.
 
@@ -255,7 +287,7 @@ class MeshCoreRunner:
             )
             return
         logger.info("broadcast to %s (idx %d): %r", channel.name, channel.index, text)
-        result = await self.mc.commands.send_chan_msg(channel.index, text)
+        result = await self._send_chan_msg(channel.index, text)
         if result.type == EventType.ERROR:
             logger.error("failed to broadcast to %s: %r", channel.name, result.payload)
 
@@ -304,7 +336,7 @@ class MeshCoreRunner:
 
         async def reply(text: str) -> None:
             logger.info("%s reply: %r", label, text)
-            result = await self.mc.commands.send_chan_msg(channel_idx, text)
+            result = await self._send_chan_msg(channel_idx, text)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)
 

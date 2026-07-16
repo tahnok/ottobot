@@ -128,3 +128,13 @@ class TaskContext:
 
     async def reply(self, text: str) -> None:
         await self._reply(text)
+
+    async def reply_many(self, texts: Iterable[str]) -> None:
+        """Send each string in *texts* as its own reply, in order.
+
+        For a task with several things to announce at once (e.g. the weather
+        task finding multiple new alerts in one fetch): each goes out as its
+        own packet rather than being crammed into one.
+        """
+        for text in texts:
+            await self._reply(text)
