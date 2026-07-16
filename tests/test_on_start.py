@@ -2,7 +2,7 @@
 
 import types
 
-from ottobot import Ottobot, OnStart, on_start
+from ottobot import Ottobot, on_start
 from ottobot.registry import module_on_start
 from ottobot.sinks import register_module
 
@@ -13,13 +13,11 @@ class TestOnStartMarker:
 
         assert on_start()(hook) is hook
 
-    def test_decorator_attaches_metadata(self) -> None:
+    def test_decorator_attaches_marker(self) -> None:
         @on_start()
         async def hook(bot: Ottobot) -> None: ...
 
-        meta = getattr(hook, "_ottobot_on_start")
-        assert isinstance(meta, OnStart)
-        assert meta.handler is hook
+        assert getattr(hook, "_ottobot_on_start") is hook
 
     def test_module_on_start_collects_marked_handlers(self) -> None:
         module = types.ModuleType("fake")
@@ -29,7 +27,7 @@ class TestOnStartMarker:
 
         hook.__module__ = "fake"
         setattr(module, "hook", hook)
-        assert [h.handler for h in module_on_start(module)] == [hook]
+        assert module_on_start(module) == [hook]
 
     def test_imported_handlers_are_not_collected(self) -> None:
         @on_start()
@@ -48,7 +46,7 @@ class TestSetup:
         async def hook(b: Ottobot) -> None:
             seen.append(b)
 
-        bot.add_on_start(OnStart(handler=hook))
+        bot.add_on_start(hook)
         await bot.setup()
         assert seen == [bot]
 
@@ -65,4 +63,4 @@ class TestSetup:
         setattr(module, "hook", hook)
 
         register_module(bot, module)
-        assert [h.handler for h in bot._on_start] == [hook]
+        assert bot._on_start == [hook]

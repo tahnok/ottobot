@@ -19,24 +19,12 @@ replies with.
 
 from __future__ import annotations
 
-import importlib
-import logging
-import pkgutil
+import sys
 from types import ModuleType
 
 from ..bot import Ottobot
+from ..discovery import load_package
 from ..registry import ScheduledTask, module_tasks
-
-logger = logging.getLogger(__name__)
-
-
-def iter_module_names() -> list[str]:
-    """Names of all task modules in this package, sorted."""
-    return sorted(
-        info.name
-        for info in pkgutil.iter_modules(__path__)
-        if not info.name.startswith("_")
-    )
 
 
 def register_module(bot: Ottobot, module: ModuleType) -> list[ScheduledTask]:
@@ -54,19 +42,7 @@ def register_module(bot: Ottobot, module: ModuleType) -> list[ScheduledTask]:
 def load_tasks(bot: Ottobot) -> list[str]:
     """Import every task module and register its @task handlers.
 
-    Returns the module names that were loaded. Fails fast: a module with
-    no @task-marked handlers raises TypeError, import errors propagate.
-    A broken task file should stop the bot from starting, not be
-    skipped silently.
+    Returns the module names that were loaded; see discovery.load_package
+    for the failure modes.
     """
-    loaded: list[str] = []
-    for name in iter_module_names():
-        module = importlib.import_module(f"{__name__}.{name}")
-        if not register_module(bot, module):
-            raise TypeError(
-                f"task module {module.__name__!r} must define at least one "
-                "@task handler"
-            )
-        loaded.append(name)
-        logger.debug("loaded task module %s", name)
-    return loaded
+    return load_package(bot, sys.modules[__name__], register_module, "@task")

@@ -10,20 +10,15 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import timedelta
-from pathlib import Path
 
 from .channels import COMMAND_CHANNELS, ChannelConfig, is_command_channel
 from .config import BotConfig
 from .registry import (
     Command,
     CommandHandler,
-    CommandRegistry,
-    OnStart,
+    OnStartHandler,
     ScheduledTask,
-    Sink,
-    SinkRegistry,
     TaskHandler,
-    TaskRegistry,
 )
 from .context import Context, IncomingMessage, ReplyFunc
 
@@ -67,34 +62,28 @@ class Ottobot:
         self.command_channels = command_channels
         # The loaded TOML config, surfaced to handlers via Context.config.
         self.config = config or BotConfig()
-        self.registry = CommandRegistry()
-        self.sink_registry = SinkRegistry()
-        self.task_registry = TaskRegistry()
-        self._on_start: list[OnStart] = []
+        # Every command, keyed by each of its names/aliases (lowercased).
+        self._commands: dict[str, Command] = {}
+        # Sinks run on every message; tasks run on the runner's timer;
+        # on_start hooks run once in setup().
+        self.sinks: list[CommandHandler] = []
+        self.tasks: list[ScheduledTask] = []
+        self._on_start: list[OnStartHandler] = []
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
 
     def command(
-        self,
-        name: str,
-        *,
-        help: str = "",
-        aliases: tuple[str, ...] = (),
-        requires_address: bool = True,
+        self, name: str, **kwargs
     ) -> Callable[[CommandHandler], CommandHandler]:
-        """Decorator that registers a command handler."""
+        """Decorator that registers a command handler.
+
+        Keyword arguments are the optional Command fields: help, aliases,
+        requires_address.
+        """
 
         def decorator(handler: CommandHandler) -> CommandHandler:
-            self.add_command(
-                Command(
-                    name=name,
-                    handler=handler,
-                    help=help,
-                    aliases=aliases,
-                    requires_address=requires_address,
-                )
-            )
+            self.add_command(Command(name, handler, **kwargs))
             return handler
 
         return decorator
@@ -105,35 +94,40 @@ class Ottobot:
         """Decorator that registers a scheduled task handler."""
 
         def decorator(handler: TaskHandler) -> TaskHandler:
-            self.add_task(
-                ScheduledTask(
-                    name=name,
-                    handler=handler,
-                    interval=interval,
-                    channel=channel,
-                    help=help,
-                )
-            )
+            self.add_task(ScheduledTask(name, handler, interval, channel, help))
             return handler
 
         return decorator
 
     def add_command(self, command: Command) -> None:
-        self.registry.register(command)
+        keys = [n.lower() for n in (command.name, *command.aliases)]
+        for key in keys:
+            if key in self._commands:
+                raise ValueError(f"command name {key!r} is already registered")
+        for key in keys:
+            self._commands[key] = command
 
-    def add_sink(self, sink: Sink) -> None:
-        self.sink_registry.register(sink)
+    def get_command(self, name: str) -> Command | None:
+        return self._commands.get(name.lower())
+
+    def commands(self) -> list[Command]:
+        """All registered commands, sorted by name (aliases deduplicated)."""
+        unique = {command.name: command for command in self._commands.values()}
+        return sorted(unique.values(), key=lambda c: c.name)
+
+    def add_sink(self, sink: CommandHandler) -> None:
+        self.sinks.append(sink)
 
     def add_task(self, task: ScheduledTask) -> None:
-        self.task_registry.register(task)
+        self.tasks.append(task)
 
-    def add_on_start(self, hook: OnStart) -> None:
+    def add_on_start(self, hook: OnStartHandler) -> None:
         self._on_start.append(hook)
 
     async def setup(self) -> None:
         """Run every registered @on_start hook once, before handling messages."""
         for hook in self._on_start:
-            await hook.handler(self)
+            await hook(self)
 
     def parse(self, text: str) -> tuple[str, str] | None:
         """Split message text into (command name, argument string).
@@ -182,13 +176,11 @@ class Ottobot:
             _reply=reply,
             config=self.config,
         )
-        for sink in self.sink_registry.all():
+        for sink in self.sinks:
             try:
-                result = await sink.handler(sink_ctx)
+                result = await sink(sink_ctx)
             except Exception:
-                logger.exception(
-                    "sink %r raised", getattr(sink.handler, "__name__", sink.handler)
-                )
+                logger.exception("sink %r raised", getattr(sink, "__name__", sink))
                 continue
             if result is not None:
                 await reply(result)
@@ -198,7 +190,7 @@ class Ottobot:
         if parsed is None:
             return
         name, args = parsed
-        command = self.registry.get(name)
+        command = self.get_command(name)
         if command is None:
             logger.debug("ignoring unknown command %r", name)
             return
@@ -241,7 +233,7 @@ class Ottobot:
         # chunk once the next entry wouldn't fit) and send each separately.
         chunks: list[str] = []
         current = ""
-        for command in self.registry.all():
+        for command in self.commands():
             entry = f"{self.prefix}{command.name}"
             if command.help:
                 entry += f" - {command.help}"

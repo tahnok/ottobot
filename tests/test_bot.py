@@ -1,7 +1,7 @@
 import pytest
 
 from helpers import ReplyRecorder, addressed, channel_msg
-from ottobot import Command, Context, Ottobot, Sink
+from ottobot import Command, Context, Ottobot
 from ottobot.channels import BOTS, OTT_ALERTS, OTTOBOT_TESTING, PUBLIC, TESTING
 
 
@@ -33,7 +33,7 @@ class TestRegistration:
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        command = bot.registry.get("ping")
+        command = bot.get_command("ping")
         assert command is not None
         assert command.help == "pong back"
 
@@ -42,14 +42,14 @@ class TestRegistration:
         async def weather(ctx: Context) -> str:
             return "sunny"
 
-        assert bot.registry.get("wx") is bot.registry.get("weather")
+        assert bot.get_command("wx") is bot.get_command("weather")
 
     def test_lookup_is_case_insensitive(self, bot: Ottobot) -> None:
         @bot.command("ping")
         async def ping(ctx: Context) -> str:
             return "pong"
 
-        assert bot.registry.get("PING") is not None
+        assert bot.get_command("PING") is not None
 
     def test_duplicate_name_rejected(self, bot: Ottobot) -> None:
         @bot.command("ping")
@@ -257,7 +257,7 @@ class TestCommandChannels:
         async def watcher(ctx: Context) -> None:
             seen.append(ctx.args)
 
-        bot.add_sink(Sink(handler=watcher))
+        bot.add_sink(watcher)
         await bot.dispatch(channel_msg("hello public", idx=PUBLIC.index), reply)
         assert seen == ["hello public"]
 

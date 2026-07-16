@@ -14,27 +14,15 @@ helpers can live in e.g. _util.py.
 
 from __future__ import annotations
 
-import importlib
-import logging
-import pkgutil
+import sys
 from types import ModuleType
 
 from ..bot import Ottobot
-from ..registry import Sink, module_on_start, module_sinks
-
-logger = logging.getLogger(__name__)
-
-
-def iter_module_names() -> list[str]:
-    """Names of all sinks modules in this package, sorted."""
-    return sorted(
-        info.name
-        for info in pkgutil.iter_modules(__path__)
-        if not info.name.startswith("_")
-    )
+from ..discovery import load_package
+from ..registry import CommandHandler, module_on_start, module_sinks
 
 
-def register_module(bot: Ottobot, module: ModuleType) -> list[Sink]:
+def register_module(bot: Ottobot, module: ModuleType) -> list[CommandHandler]:
     """Register a sink module's @sink and @on_start handlers on *bot*.
 
     Returns the sinks that were registered (its @on_start hooks, if any, are
@@ -52,19 +40,7 @@ def register_module(bot: Ottobot, module: ModuleType) -> list[Sink]:
 def load_sinks(bot: Ottobot) -> list[str]:
     """Import every sink module and register its @sink handlers.
 
-    Returns the module names that were loaded. Fails fast: a module with
-    no @sink-marked handlers raises TypeError, import errors propagate,
-    A broken sink file should stop the bot from starting, not be
-    skipped silently.
+    Returns the module names that were loaded; see discovery.load_package
+    for the failure modes.
     """
-    loaded: list[str] = []
-    for name in iter_module_names():
-        module = importlib.import_module(f"{__name__}.{name}")
-        if not register_module(bot, module):
-            raise TypeError(
-                f"sink module {module.__name__!r} must define at least one "
-                "@sink handler"
-            )
-        loaded.append(name)
-        logger.debug("loaded sink module %s", name)
-    return loaded
+    return load_package(bot, sys.modules[__name__], register_module, "@sink")
