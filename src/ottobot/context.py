@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -101,6 +101,17 @@ class Context:
     async def reply(self, text: str) -> None:
         """Send text back on the channel the message came from."""
         await self._reply(text)
+
+    async def reply_many(self, texts: Iterable[str]) -> None:
+        """Send each string in *texts* as its own reply, in order.
+
+        Opt-in: a plain reply (or a returned string) goes out as a single
+        packet and is truncated by the mesh past ~140 characters. A command
+        whose output doesn't fit one packet builds its own packet-sized
+        pieces and passes them here.
+        """
+        for text in texts:
+            await self._reply(text)
 
 
 @dataclass(frozen=True)

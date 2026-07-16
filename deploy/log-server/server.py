@@ -5,8 +5,10 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TypedDict
 
 HOST = "0.0.0.0"
 PORT = 8765
@@ -16,11 +18,24 @@ PORT = 8765
 ALLOWED_PROXY_IP = "192.168.0.54"
 REQUIRE_REVERSE_PROXY_HEADERS = True
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HTML_FILE = os.path.join(BASE_DIR, "index.html")
+BASE_DIR = "/opt/ottobot"
+HTML_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 
 UPDATE_LOG_FILE = "/var/log/ottobot-update.log"
 UPDATE_LOG_SERVICE_VALUE = "__ottobot_update_log__"
+
+# Set this to the maintenance update script installed on the server. The script
+# must be executable by the user running this log server.
+MAINTENANCE_UPDATE_SCRIPT = "/opt/ottobot-deploy/update"
+
+
+class UpdateState(TypedDict):
+    running: bool
+    last_exit_code: int | None
+
+
+UPDATE_STATE: UpdateState = {"running": False, "last_exit_code": None}
+UPDATE_STATE_LOCK = threading.Lock()
 
 # Compose service names: alphanumeric start, then [a-zA-Z0-9._-]. Anything
 # else (in particular a leading "-") must not reach the docker argv below.
@@ -47,10 +62,41 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_services()
             return
 
+        if parsed.path == "/container/status":
+            query = urllib.parse.parse_qs(parsed.query)
+            service = query.get("service", [""])[0].strip()
+            self.handle_container_status(service)
+            return
+
+        if parsed.path == "/maintenance/update":
+            self.handle_update_status()
+            return
+
+        if parsed.path == "/maintenance/services":
+            self.handle_maintenance_services_status()
+            return
+
         if parsed.path == "/events":
             query = urllib.parse.parse_qs(parsed.query)
             service = query.get("service", [""])[0].strip()
             self.handle_events(service)
+            return
+
+        self.send_error(404)
+
+    def do_POST(self):
+        if not self.is_allowed_request():
+            self.send_error(403, "Forbidden")
+            return
+
+        parsed = urllib.parse.urlparse(self.path)
+
+        if parsed.path == "/maintenance/update":
+            self.handle_update()
+            return
+
+        if parsed.path == "/maintenance/services":
+            self.handle_maintenance_services()
             return
 
         self.send_error(404)
@@ -100,6 +146,147 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def handle_container_status(self, service):
+        if service and not SERVICE_NAME_RE.match(service):
+            self.send_error(400, "Invalid service name")
+            return
+
+        compose_ps_cmd = ["docker", "compose", "ps", "-q"]
+
+        if service:
+            compose_ps_cmd.append(service)
+
+        try:
+            container_ids = subprocess.run(
+                compose_ps_cmd,
+                cwd=BASE_DIR,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            ).stdout.splitlines()
+
+            container_id = next(
+                (value.strip() for value in container_ids if value.strip()), None
+            )
+
+            if container_id is None:
+                self.send_json(404, {"error": "No running container found"})
+                return
+
+            started_at = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "--format={{.State.StartedAt}}",
+                    container_id,
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            self.send_json(503, {"error": "Unable to inspect container"})
+            return
+
+        if not started_at:
+            self.send_json(503, {"error": "Container start time is unavailable"})
+            return
+
+        self.send_json(200, {"started_at": started_at})
+
+    def handle_update_status(self):
+        with UPDATE_STATE_LOCK:
+            state = UPDATE_STATE.copy()
+
+        self.send_json(200, state)
+
+    def handle_maintenance_services_status(self):
+        try:
+            running = compose_services_are_running()
+        except (OSError, subprocess.SubprocessError):
+            self.send_json(503, {"error": "Unable to determine Docker service status"})
+            return
+
+        self.send_json(200, {"running": running})
+
+    def handle_maintenance_services(self):
+        if self.headers.get("X-Ottobot-Action") != "maintenance-services":
+            self.send_json(400, {"error": "Missing maintenance action header"})
+            return
+
+        was_running = None
+
+        try:
+            was_running = compose_services_are_running()
+            command = (
+                ["docker", "compose", "down"]
+                if was_running
+                else [
+                    "docker",
+                    "compose",
+                    "up",
+                    "-d",
+                ]
+            )
+            subprocess.run(
+                command,
+                cwd=BASE_DIR,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            action = (
+                "manage"
+                if was_running is None
+                else ("stop" if was_running else "start")
+            )
+            self.send_json(500, {"error": f"Unable to {action} Docker services"})
+            return
+
+        self.send_json(200, {"running": not was_running})
+
+    def handle_update(self):
+        if self.headers.get("X-Ottobot-Action") != "maintenance-update":
+            self.send_json(400, {"error": "Missing update action header"})
+            return
+
+        if not os.path.isfile(MAINTENANCE_UPDATE_SCRIPT):
+            self.send_json(500, {"error": "Maintenance update script not found"})
+            return
+
+        if not os.access(MAINTENANCE_UPDATE_SCRIPT, os.X_OK):
+            self.send_json(
+                500, {"error": "Maintenance update script is not executable"}
+            )
+            return
+
+        with UPDATE_STATE_LOCK:
+            already_running = UPDATE_STATE["running"]
+
+            if not already_running:
+                UPDATE_STATE["running"] = True
+                UPDATE_STATE["last_exit_code"] = None
+
+        if already_running:
+            self.send_json(409, {"error": "Maintenance update is already running"})
+            return
+
+        try:
+            worker = threading.Thread(target=run_maintenance_update, daemon=True)
+            worker.start()
+        except RuntimeError:
+            with UPDATE_STATE_LOCK:
+                UPDATE_STATE["running"] = False
+
+            self.send_json(500, {"error": "Unable to start maintenance update"})
+            return
+
+        self.send_json(202, {"running": True, "last_exit_code": None})
 
     def handle_events(self, service):
         if service == UPDATE_LOG_SERVICE_VALUE:
@@ -186,6 +373,16 @@ class Handler(BaseHTTPRequestHandler):
 
         return True
 
+    def send_json(self, status, value):
+        body = json.dumps(value).encode("utf-8")
+
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, format, *args):
         return
 
@@ -210,6 +407,39 @@ FAVICON_SVG = b"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 
 def host_is_local_only():
     return HOST in ("127.0.0.1", "localhost", "::1")
+
+
+def compose_services_are_running():
+    result = subprocess.run(
+        ["docker", "compose", "ps", "-q"],
+        cwd=BASE_DIR,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return bool(result.stdout.strip())
+
+
+def run_maintenance_update():
+    exit_code = 1
+
+    try:
+        result = subprocess.run(
+            [MAINTENANCE_UPDATE_SCRIPT],
+            cwd=os.path.dirname(MAINTENANCE_UPDATE_SCRIPT) or None,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        exit_code = result.returncode
+    except OSError:
+        pass
+    finally:
+        with UPDATE_STATE_LOCK:
+            UPDATE_STATE["running"] = False
+            UPDATE_STATE["last_exit_code"] = exit_code
 
 
 if __name__ == "__main__":

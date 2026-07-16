@@ -1,14 +1,23 @@
-"""Tests for the welcome sink: greets each channel name once, persisted."""
+"""Tests for the welcome sink: greets each channel name once, persisted,
+at most one greeting per WELCOME_INTERVAL."""
 
 import sqlite3
 from pathlib import Path
 
+import pytest
 from helpers import ReplyRecorder, channel_msg
 from ottobot import IncomingMessage, Ottobot
 from ottobot.config import BotConfig
 from ottobot.sinks import register_module
 from ottobot.sinks import welcome as welcome_module
 from ottobot.sinks.welcome import WELCOME
+
+
+@pytest.fixture(autouse=True)
+def fresh_welcome_clock() -> None:
+    # The last-greeting clock is module-level state; start each test as if
+    # the bot just booted (the clock gets primed from the db when needed).
+    welcome_module._last_welcome = None
 
 
 async def make_welcome_bot(db_path: Path) -> Ottobot:
@@ -42,13 +51,19 @@ async def test_repeat_from_same_name_is_silent(
     assert reply.replies == [WELCOME]
 
 
-async def test_different_names_each_welcomed(
+async def test_second_newcomer_in_quick_succession_is_rate_limited(
     tmp_path: Path, reply: ReplyRecorder
 ) -> None:
-    bot = await make_welcome_bot(tmp_path / "seen.db")
+    # bob arrives right after alice, inside the cooldown: he is recorded
+    # like any other newcomer but his greeting is dropped for good.
+    db_path = tmp_path / "seen.db"
+    bot = await make_welcome_bot(db_path)
     await bot.dispatch(chan("hi", "alice"), reply)
     await bot.dispatch(chan("hi", "bob"), reply)
-    assert reply.replies == [WELCOME, WELCOME]
+    assert reply.replies == [WELCOME]
+    with sqlite3.connect(db_path) as conn:
+        names = {row[0] for row in conn.execute("SELECT id FROM seen_clients")}
+    assert names == {"alice", "bob"}  # recorded right away despite no greeting
 
 
 async def test_channel_message_without_a_name_is_ignored(
@@ -66,6 +81,39 @@ async def test_persists_across_restart(tmp_path: Path, reply: ReplyRecorder) -> 
     # A fresh bot on the same db file should not re-welcome a known name.
     second = await make_welcome_bot(db_path)
     await second.dispatch(channel_msg("hi again"), reply)
+    assert reply.replies == [WELCOME]
+
+
+async def test_faraway_newcomer_is_not_greeted_and_not_recorded(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    # A newcomer heard from beyond WELCOME_MAX_HOPS is out of scope: no
+    # greeting, and (unlike the cooldown) not recorded either, so the same
+    # name is greeted normally once heard from within range.
+    db_path = tmp_path / "seen.db"
+    bot = await make_welcome_bot(db_path)
+    await bot.dispatch(channel_msg("hi from afar", path_len=6), reply)
+    assert reply.replies == []
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM seen_clients").fetchone() == (0,)
+    await bot.dispatch(channel_msg("hi again, closer now", path_len=2), reply)
+    assert reply.replies == [WELCOME]
+
+
+async def test_newcomer_at_the_hop_limit_is_greeted(
+    tmp_path: Path, reply: ReplyRecorder
+) -> None:
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(
+        channel_msg("hi", path_len=welcome_module.WELCOME_MAX_HOPS), reply
+    )
+    assert reply.replies == [WELCOME]
+
+
+async def test_direct_newcomer_is_greeted(tmp_path: Path, reply: ReplyRecorder) -> None:
+    # path_len 255 means the message arrived directly (zero hops).
+    bot = await make_welcome_bot(tmp_path / "seen.db")
+    await bot.dispatch(channel_msg("hi", path_len=255), reply)
     assert reply.replies == [WELCOME]
 
 
@@ -105,3 +153,61 @@ def test_record_tracks_first_and_last_seen(tmp_path: Path) -> None:
         ).fetchone()
     assert first_seen == day1  # unchanged on the repeat
     assert last_seen == day2  # bumped to the latest sighting
+
+
+def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None:
+    # bob shows up 30 minutes after alice's greeting: too soon. He is
+    # recorded right away anyway, and the missed greeting is dropped — a
+    # later message from him is just a repeat from a known name.
+    db_path = tmp_path / "seen.db"
+    welcome_module._init_db(db_path)
+    t0 = "2026-01-01T00:00:00+00:00"
+    t0_plus_30m = "2026-01-01T00:30:00+00:00"
+    t0_plus_2h = "2026-01-01T02:00:00+00:00"
+    assert welcome_module._record(db_path, "alice", t0) is True
+    assert welcome_module._record(db_path, "bob", t0_plus_30m) is False
+    with sqlite3.connect(db_path) as conn:
+        first_seen = conn.execute(
+            "SELECT first_seen FROM seen_clients WHERE id = 'bob'"
+        ).fetchone()[0]
+    assert first_seen == t0_plus_30m  # recorded immediately despite no greeting
+    assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
+
+
+def test_should_greet_scopes_by_channel_and_hops() -> None:
+    # The greeting scope in one place: public channel only, and only
+    # network-local senders (unknown path counts as local).
+    max_hops = welcome_module.WELCOME_MAX_HOPS
+
+    def msg(idx: int = 0, path_len: int | None = None) -> IncomingMessage:
+        return IncomingMessage(text="hi", channel_idx=idx, path_len=path_len)
+
+    assert welcome_module._should_greet(msg())  # unknown path
+    assert welcome_module._should_greet(msg(path_len=255))  # direct
+    assert welcome_module._should_greet(msg(path_len=max_hops))  # at the limit
+    assert not welcome_module._should_greet(msg(path_len=max_hops + 1))
+    assert not welcome_module._should_greet(msg(idx=1))  # not the public channel
+
+
+def test_record_cooldown_runs_from_the_last_greeting(tmp_path: Path) -> None:
+    # Ungreeted arrivals don't push the clock: bob (suppressed, 50 minutes
+    # after alice's greeting) doesn't delay carol, who arrives just over an
+    # hour after alice and is greeted — a steady trickle of newcomers still
+    # gets about one greeting per interval.
+    db_path = tmp_path / "seen.db"
+    welcome_module._init_db(db_path)
+    assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
+    assert not welcome_module._record(db_path, "bob", "2026-01-01T00:50:00+00:00")
+    assert welcome_module._record(db_path, "carol", "2026-01-01T01:05:00+00:00")
+
+
+def test_record_primes_the_clock_from_the_db_after_a_restart(tmp_path: Path) -> None:
+    # The in-memory clock is empty after a restart; it is primed from the
+    # newest first_seen so the bot doesn't greet again right away, and a
+    # newcomer past the interval is greeted as usual.
+    db_path = tmp_path / "seen.db"
+    welcome_module._init_db(db_path)
+    assert welcome_module._record(db_path, "alice", "2026-01-01T00:00:00+00:00")
+    welcome_module._last_welcome = None  # "restart"
+    assert not welcome_module._record(db_path, "bob", "2026-01-01T00:30:00+00:00")
+    assert welcome_module._record(db_path, "carol", "2026-01-01T01:05:00+00:00")

@@ -228,8 +228,8 @@ class TestChannelMessages:
     async def test_sender_name_parsed_from_text_convention(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
-        await mc.deliver_chan("alice: ottobot !whoami")
-        assert mc.commands.sent_chan_msgs == [(0, "alice")]
+        await mc.deliver_chan("alice: ottobot !whoami", channel_idx=2)
+        assert mc.commands.sent_chan_msgs == [(2, "alice")]
 
     async def test_text_without_name_prefix_is_ignored(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
@@ -257,8 +257,8 @@ class TestChannelMessages:
     async def test_channel_path_is_passed_through(
         self, runner: MeshCoreRunner, mc: FakeMeshCore
     ) -> None:
-        await mc.deliver_chan("alice: ottobot !path", path_len=255)
-        assert mc.commands.sent_chan_msgs == [(0, "direct")]
+        await mc.deliver_chan("alice: ottobot !path", channel_idx=2, path_len=255)
+        assert mc.commands.sent_chan_msgs == [(2, "direct")]
 
     async def test_channel_exposes_raw_payload(
         self, runner: MeshCoreRunner, mc: FakeMeshCore

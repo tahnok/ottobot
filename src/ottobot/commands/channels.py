@@ -7,6 +7,7 @@ from ottobot import Context, command
 # join, not the set the bot itself tunes to (see ottobot.channels.CHANNELS).
 CHANNELS = (
     "#ottawa",
+    "#bots",
     "#testing",
     "#hike",
     "#bike",

@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 
 from ottobot import Context, Ottobot, TaskContext
-from ottobot.channels import PUBLIC
+from ottobot.channels import BOTS, PUBLIC
 from ottobot.cli import parse_args
 from ottobot.simulator import Simulator
 
@@ -43,9 +43,18 @@ class TestMessages:
     async def test_blank_line_prints_nothing(self, sim: Simulator) -> None:
         assert await sim.handle_line("   ") == []
 
-    async def test_defaults_to_channel_zero(self, sim: Simulator) -> None:
+    async def test_starts_on_the_bots_channel(self, sim: Simulator) -> None:
+        # Commands are only answered on the command channels, so the
+        # simulator starts on #bots rather than public.
         message = sim.build_message("!ping")
-        assert message.channel_idx == 0
+        assert message.channel_idx == BOTS.index
+
+    async def test_command_off_command_channel_explains_silence(
+        self, sim: Simulator
+    ) -> None:
+        await sim.handle_line("/channel 0")
+        (notice,) = await sim.handle_line("@[ottobot] !ping")
+        assert "not answered on channel 0" in notice
 
 
 class TestControls:
@@ -53,14 +62,15 @@ class TestControls:
         await sim.handle_line("/channel 2")
         assert await sim.handle_line("@[ottobot] !whoami") == ["bot> you via channel 2"]
 
-    async def test_channel_defaults_to_zero(self, sim: Simulator) -> None:
+    async def test_channel_without_arg_returns_to_bots(self, sim: Simulator) -> None:
+        await sim.handle_line("/channel 0")
         await sim.handle_line("/channel")
-        assert sim.channel_idx == 0
+        assert sim.channel_idx == BOTS.index
 
     async def test_name_changes_sender(self, sim: Simulator) -> None:
         await sim.handle_line("/name alice")
         assert await sim.handle_line("@[ottobot] !whoami") == [
-            "bot> alice via channel 0"
+            f"bot> alice via channel {BOTS.index}"
         ]
 
     async def test_hops_with_route_shows_in_path(self, sim: Simulator) -> None:
@@ -105,7 +115,7 @@ class TestControls:
         assert "/help" in notice
 
     async def test_prompt_tracks_persona(self, sim: Simulator) -> None:
-        assert sim.prompt == "you@ch0> "
+        assert sim.prompt == f"you@ch{BOTS.index}> "
         await sim.handle_line("/name alice")
         await sim.handle_line("/channel 2")
         assert sim.prompt == "alice@ch2> "

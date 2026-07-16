@@ -2,6 +2,7 @@ import pytest
 
 from helpers import ReplyRecorder, addressed
 from ottobot import Ottobot
+from ottobot.channels import BOTS
 from ottobot.commands import ping, register_module
 from ottobot.context import IncomingMessage
 
@@ -30,6 +31,6 @@ async def test_ping_reports_hops(bot: Ottobot, reply: ReplyRecorder) -> None:
 
 
 async def test_ping_without_sender_name(bot: Ottobot, reply: ReplyRecorder) -> None:
-    msg = IncomingMessage(text="@[ottobot] !ping", channel_idx=0, path_len=255)
+    msg = IncomingMessage(text="@[ottobot] !ping", channel_idx=BOTS.index, path_len=255)
     await bot.dispatch(msg, reply)
     assert reply.replies == ["@[you] pong (direct)"]

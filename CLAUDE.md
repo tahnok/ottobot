@@ -75,6 +75,13 @@ together as the `ottobot` entry point.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.
+- **Commands only answer on the command channels** — `COMMAND_CHANNELS` in
+  `src/ottobot/channels.py` (`#bots`, `#testing`, `#ottobot-testing`).
+  Command messages on any other joined channel (public, `#ott-alerts`) are
+  silently ignored by dispatch. Sinks still see every message on every
+  joined channel, and scheduled tasks broadcast on their declared channel
+  regardless. The simulator starts on `#bots` so commands answer out of
+  the box.
 - **Don't trust `ctx.sender_name`** — every message is a channel message,
   and the name is recovered from a spoofable `"Name: message"` text
   convention, so never use it for authorization.
@@ -93,5 +100,6 @@ together as the `ottobot` entry point.
 Tests run against a fake in-memory bot/device — no hardware needed.
 `tests/conftest.py` provides `bot`/`reply` fixtures; `tests/helpers.py`
 provides `channel_msg()`, `addressed()` (a channel message that mentions
-the bot so commands run), and `ReplyRecorder`. `pytest-asyncio` is in
-`auto` mode, so async tests need no extra decorators.
+the bot and arrives on `#bots` so commands run), and `ReplyRecorder`.
+`pytest-asyncio` is in `auto` mode, so async tests need no extra
+decorators.
