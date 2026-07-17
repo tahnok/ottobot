@@ -174,6 +174,11 @@ def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None
     assert welcome_module._record(db_path, "bob", t0_plus_2h) is False  # never greeted
 
 
+def test_welcome_message_fits_in_a_single_packet() -> None:
+    # Mesh bandwidth is limited; keep the greeting to a single packet.
+    assert len(WELCOME) < 140
+
+
 def test_should_greet_scopes_by_channel_and_hops() -> None:
     # The greeting scope in one place: public channel only, and only
     # network-local senders (unknown path counts as local).
