@@ -36,7 +36,7 @@ from ottobot.channels import PUBLIC
 # under 140 chars plz — and mention only #bots, since that's the one
 # channel newcomers need to reach the bot (commands aren't answered here
 # on public).
-WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at https://ottawamesh.ca"
+WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More at ottawamesh.ca or discord.gg/WSyNd8SfNr"
 
 # Minimum time between two welcome messages (issue #80: don't greet too fast).
 WELCOME_INTERVAL = timedelta(hours=1)
