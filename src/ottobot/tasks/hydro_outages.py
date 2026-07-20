@@ -34,7 +34,6 @@ and an ongoing significant outage is announced once on startup.
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
 from typing import Any
 
@@ -42,8 +41,6 @@ import httpx
 
 from ottobot import TaskContext, task
 from ottobot.channels import OTT_ALERTS
-
-logger = logging.getLogger(__name__)
 
 # Stable deployment identifiers embedded in the outage map's page
 # (docs/hydro-ottawa-outages-api.md); re-derive from the page if requests
@@ -91,8 +88,8 @@ def _val(value: Any) -> int:
 
     Missing or null values raise rather than default to 0 — a zero conjured
     out of absent data could fire a bogus all-clear or hide a real outage.
-    The raise trips the task's catch-all, so the poll is logged as a failure
-    and retried instead of announcing nonsense.
+    The runner logs a raising task and carries on, so the poll fails loudly
+    and is retried instead of announcing nonsense.
     """
     if isinstance(value, dict):
         value = value.get("val")
@@ -170,49 +167,47 @@ async def hydro_outages(ctx: TaskContext) -> str | None:
     headers = {}
     if _state_last_modified is not None:
         headers["If-Modified-Since"] = _state_last_modified
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.get(CURRENT_STATE_URL, headers=headers)
-            if response.status_code == 304:
-                return None
-            response.raise_for_status()
-            state = response.json()
-            state_last_modified = response.headers.get("Last-Modified")
-            updated_at = state.get("updatedAt")
-            if updated_at is not None and updated_at == _last_updated_at:
-                _state_last_modified = state_last_modified
-                return None
-            interval_path = state["data"]["interval_generation_data"]
+    # A failed fetch just raises: the runner (and simulator) log a raising
+    # task and keep the schedule going.
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(CURRENT_STATE_URL, headers=headers)
+        if response.status_code == 304:
+            return None
+        response.raise_for_status()
+        state = response.json()
+        state_last_modified = response.headers.get("Last-Modified")
+        updated_at = state.get("updatedAt")
+        if updated_at is not None and updated_at == _last_updated_at:
+            _state_last_modified = state_last_modified
+            return None
+        interval_path = state["data"]["interval_generation_data"]
 
-            summary = await _get_json(client, summary_url(interval_path))
-            file_data = summary["summaryFileData"]
-            totals = file_data["totals"][0]
-            customers = _val(totals.get("total_cust_a"))
-            outages = _val(totals.get("total_outages"))
-            storm = (file_data.get("page_mode") or {}).get("mode") == "STORM"
+        summary = await _get_json(client, summary_url(interval_path))
+        file_data = summary["summaryFileData"]
+        totals = file_data["totals"][0]
+        customers = _val(totals.get("total_cust_a"))
+        outages = _val(totals.get("total_outages"))
+        storm = (file_data.get("page_mode") or {}).get("mode") == "STORM"
 
-            announcement: str | None = None
-            if _announced_customers is None:
-                if storm or customers >= MIN_CUSTOMERS_AFFECTED:
-                    report = await _get_json(client, ward_report_url(interval_path))
-                    announcement = format_announcement(
-                        customers, outages, affected_areas(report), storm
-                    )
-                    _announced_customers = customers
-            elif customers < ALL_CLEAR_BELOW and not storm:
-                announcement = format_all_clear(customers)
-                _announced_customers = None
-            elif customers >= ESCALATION_FACTOR * max(
-                _announced_customers, MIN_CUSTOMERS_AFFECTED
-            ):
+        announcement: str | None = None
+        if _announced_customers is None:
+            if storm or customers >= MIN_CUSTOMERS_AFFECTED:
                 report = await _get_json(client, ward_report_url(interval_path))
                 announcement = format_announcement(
                     customers, outages, affected_areas(report), storm
                 )
                 _announced_customers = customers
-    except Exception:
-        logger.warning("failed to fetch Hydro Ottawa outage data", exc_info=True)
-        return None
+        elif customers < ALL_CLEAR_BELOW and not storm:
+            announcement = format_all_clear(customers)
+            _announced_customers = None
+        elif customers >= ESCALATION_FACTOR * max(
+            _announced_customers, MIN_CUSTOMERS_AFFECTED
+        ):
+            report = await _get_json(client, ward_report_url(interval_path))
+            announcement = format_announcement(
+                customers, outages, affected_areas(report), storm
+            )
+            _announced_customers = customers
 
     # Only mark the snapshot processed (and keep its validator) once
     # everything above succeeded, so a failed downstream fetch is retried

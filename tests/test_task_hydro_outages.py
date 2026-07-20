@@ -401,14 +401,16 @@ class TestHydroOutagesTask:
         assert await outages_mod.hydro_outages(make_ctx()) is None
         assert outages_mod._announced_customers == 100
 
-    async def test_fetch_failure_does_not_raise(
+    async def test_fetch_failure_propagates_without_touching_state(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # No local catch-all: the runner logs a raising task and carries on.
         fake_httpx_client(
             monkeypatch,
             {outages_mod.CURRENT_STATE_URL: RuntimeError("network is down")},
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        with pytest.raises(RuntimeError):
+            await outages_mod.hydro_outages(make_ctx())
         assert outages_mod._last_updated_at is None
 
     async def test_failed_summary_fetch_is_retried_next_poll(
@@ -423,7 +425,8 @@ class TestHydroOutagesTask:
                 outages_mod.summary_url("data/guid-1"): RuntimeError("boom"),
             },
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        with pytest.raises(RuntimeError):
+            await outages_mod.hydro_outages(make_ctx())
         assert outages_mod._last_updated_at is None
 
         fake_httpx_client(
@@ -443,7 +446,8 @@ class TestHydroOutagesTask:
         del broken["summaryFileData"]["totals"][0]["total_cust_a"]
         responses[outages_mod.summary_url("data/guid-1")] = broken
         fake_httpx_client(monkeypatch, responses)
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        with pytest.raises(ValueError):
+            await outages_mod.hydro_outages(make_ctx())
         assert outages_mod._last_updated_at is None
         assert outages_mod._announced_customers is None
 
@@ -505,5 +509,6 @@ class TestConditionalFetch:
             },
             response_headers=self.LAST_MODIFIED,
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        with pytest.raises(RuntimeError):
+            await outages_mod.hydro_outages(make_ctx())
         assert outages_mod._state_last_modified is None
