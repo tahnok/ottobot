@@ -39,11 +39,18 @@ ALERTS_URL = "https://api.weather.gc.ca/collections/weather-alerts/items"
 
 # The Ottawa region. bbox is min-lon,min-lat,max-lon,max-lat; limit is set
 # well above the handful of alert polygons Ottawa ever sees at once so a
-# real alert can't be truncated off the end of the collection.
+# real alert can't be truncated off the end of the collection (the API
+# default is only 10). skipGeometry drops the alert polygons and
+# `properties` restricts the response to the handful of fields we read —
+# without them each Feature also carries its full boundary polygon and
+# multi-paragraph bilingual alert_text, ~75x more payload we'd only throw
+# away.
 _PARAMS = {
     "bbox": "-76.1,45.15,-75.4,45.55",
     "f": "json",
     "limit": 100,
+    "skipGeometry": "true",
+    "properties": "id,feature_id,alert_name_en,alert_code,publication_datetime",
 }
 
 # Announced once when the last active alert clears (the empty collection
