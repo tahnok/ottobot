@@ -1,0 +1,99 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "2033032502128323953202607160501_fea1-2112",
+        "alert_code": "AQW",
+        "alert_type": "warning",
+        "alert_name_en": "air quality warning",
+        "alert_short_name_en": "Air quality",
+        "publication_datetime": "2026-07-21T09:33:02.573Z",
+        "expiration_datetime": "2026-07-22T01:33:02.573Z",
+        "feature_name_en": "Ottawa North - Kanata - Orléans",
+        "feature_id": "fea1-2112",
+        "status_en": "continued"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -75.7,
+          45.4
+        ]
+      },
+      "id": "2033032502128323953202607160501_fea1-2112"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "2033032502128323953202607160501_fea1-2115",
+        "alert_code": "AQW",
+        "alert_type": "warning",
+        "alert_name_en": "air quality warning",
+        "alert_short_name_en": "Air quality",
+        "publication_datetime": "2026-07-21T09:33:02.573Z",
+        "expiration_datetime": "2026-07-22T01:33:02.573Z",
+        "feature_name_en": "Ottawa South - Metcalfe - Greely",
+        "feature_id": "fea1-2115",
+        "status_en": "continued"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -75.7,
+          45.4
+        ]
+      },
+      "id": "2033032502128323953202607160501_fea1-2115"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "2033032502128323953202607160501_fea1-2114",
+        "alert_code": "AQW",
+        "alert_type": "warning",
+        "alert_name_en": "air quality warning",
+        "alert_short_name_en": "Air quality",
+        "publication_datetime": "2026-07-21T09:33:02.573Z",
+        "expiration_datetime": "2026-07-22T01:33:02.573Z",
+        "feature_name_en": "Gatineau",
+        "feature_id": "fea1-2114",
+        "status_en": "continued"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -75.7,
+          45.4
+        ]
+      },
+      "id": "2033032502128323953202607160501_fea1-2114"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "103014960368369662202607210502_fea1-2370",
+        "alert_code": "EHW",
+        "alert_type": "warning",
+        "alert_name_en": "heat warning",
+        "alert_short_name_en": "Heat",
+        "publication_datetime": "2026-07-21T10:53:45.081Z",
+        "expiration_datetime": "2026-07-22T02:53:45.081Z",
+        "feature_name_en": "Ottawa North - Kanata - Orléans",
+        "feature_id": "fea1-2370",
+        "status_en": "issued"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -75.7,
+          45.4
+        ]
+      },
+      "id": "103014960368369662202607210502_fea1-2370"
+    }
+  ],
+  "numberMatched": 4,
+  "numberReturned": 4
+}
