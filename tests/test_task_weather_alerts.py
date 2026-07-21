@@ -22,6 +22,17 @@ FIXTURE_PAYLOAD: dict[str, Any] = json.loads(
     )
 )
 
+# A real response captured live from the bot's own Ottawa query (bbox +
+# skipGeometry + properties) during a severe-weather event on 2026-07-21:
+# a red tornado warning alongside severe thunderstorm warnings/watches. The
+# 13 Features dedupe to 5 distinct alerts — several alerts each span
+# multiple polygons.
+TORNADO_PAYLOAD: dict[str, Any] = json.loads(
+    (Path(__file__).parent / "fixtures" / "weather_alerts_tornado.json").read_text(
+        encoding="utf-8"
+    )
+)
+
 # A minimal air-quality warning as two polygons of one bulletin.
 AQW = {
     "type": "FeatureCollection",
@@ -182,6 +193,18 @@ class TestParseAlerts:
         (alert,) = alerts_mod.parse_alerts(AQW)
         assert alert.title == "Air Quality Warning"
 
+    def test_parses_real_severe_weather_event(self) -> None:
+        # 13 polygons across 5 alerts (incl. a tornado warning), deduped and
+        # ordered oldest-first by publication time.
+        alerts = alerts_mod.parse_alerts(TORNADO_PAYLOAD)
+        assert [a.title for a in alerts] == [
+            "Severe Thunderstorm Watch",
+            "Severe Thunderstorm Watch",
+            "Severe Thunderstorm Warning",
+            "Tornado Warning",
+            "Severe Thunderstorm Warning",
+        ]
+
     def test_no_active_alerts_returns_empty(self) -> None:
         assert alerts_mod.parse_alerts(EMPTY) == []
 
@@ -278,6 +301,25 @@ class TestWeatherAlertsTask:
         replies: list[str] = []
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == ["Heat Warning", "Severe Thunderstorm Watch"]
+
+    async def test_severe_weather_event_announces_each_alert_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Real capture: 13 polygons -> 5 alerts, each announced once on its
+        # own packet, oldest-first, with the tornado warning among them.
+        fake_httpx_client(monkeypatch, payload=EMPTY)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        fake_httpx_client(monkeypatch, payload=TORNADO_PAYLOAD)
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == [
+            "Severe Thunderstorm Watch",
+            "Severe Thunderstorm Watch",
+            "Severe Thunderstorm Warning",
+            "Tornado Warning",
+            "Severe Thunderstorm Warning",
+        ]
 
     async def test_unchanged_collection_announces_nothing(
         self, monkeypatch: pytest.MonkeyPatch

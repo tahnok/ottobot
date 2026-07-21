@@ -1,0 +1,163 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "id": "1351204191720743135202607210504_fea1-939",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1351204191720743135202607210504_fea1-939",
+        "feature_id": "fea1-939",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T14:28:45.837Z"
+      }
+    },
+    {
+      "id": "1351204191720743135202607210504_fea1-935",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1351204191720743135202607210504_fea1-935",
+        "feature_id": "fea1-935",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T14:28:45.837Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-905",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-905",
+        "feature_id": "fea1-905",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-1246",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-1246",
+        "feature_id": "fea1-1246",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-1247",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-1247",
+        "feature_id": "fea1-1247",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-1237",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-1237",
+        "feature_id": "fea1-1237",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-1243",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-1243",
+        "feature_id": "fea1-1243",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1242287611570135485202607210503_fea1-1209",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1242287611570135485202607210503_fea1-1209",
+        "feature_id": "fea1-1209",
+        "alert_name_en": "severe thunderstorm watch",
+        "alert_code": "STV",
+        "publication_datetime": "2026-07-21T19:47:11.034Z"
+      }
+    },
+    {
+      "id": "1817264821502439921202607210503_fea1-1247",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1817264821502439921202607210503_fea1-1247",
+        "feature_id": "fea1-1247",
+        "alert_name_en": "severe thunderstorm warning",
+        "alert_code": "STW",
+        "publication_datetime": "2026-07-21T20:03:49.505Z"
+      }
+    },
+    {
+      "id": "1817264821502439921202607210503_fea1-1209",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "1817264821502439921202607210503_fea1-1209",
+        "feature_id": "fea1-1209",
+        "alert_name_en": "severe thunderstorm warning",
+        "alert_code": "STW",
+        "publication_datetime": "2026-07-21T20:03:49.505Z"
+      }
+    },
+    {
+      "id": "2018187961720743135202607210504_fea1-939",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "2018187961720743135202607210504_fea1-939",
+        "feature_id": "fea1-939",
+        "alert_name_en": "severe thunderstorm warning",
+        "alert_code": "STW",
+        "publication_datetime": "2026-07-21T20:18:18.796Z"
+      }
+    },
+    {
+      "id": "2011364731502439921202607210503_fea1-1246",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "2011364731502439921202607210503_fea1-1246",
+        "feature_id": "fea1-1246",
+        "alert_name_en": "tornado warning",
+        "alert_code": "TRW",
+        "publication_datetime": "2026-07-21T20:11:36.473Z"
+      }
+    },
+    {
+      "id": "2011364731502439921202607210503_fea1-1237",
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "id": "2011364731502439921202607210503_fea1-1237",
+        "feature_id": "fea1-1237",
+        "alert_name_en": "tornado warning",
+        "alert_code": "TRW",
+        "publication_datetime": "2026-07-21T20:11:36.473Z"
+      }
+    }
+  ],
+  "numberMatched": 13,
+  "numberReturned": 13
+}
