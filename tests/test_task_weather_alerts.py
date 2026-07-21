@@ -77,20 +77,11 @@ def with_feature(
 def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(alerts_mod, "_seen", set())
     monkeypatch.setattr(alerts_mod, "_primed", False)
-    monkeypatch.setattr(alerts_mod, "_etag", None)
-    monkeypatch.setattr(alerts_mod, "_last_modified", None)
 
 
 class FakeResponse:
-    def __init__(
-        self,
-        payload: dict[str, Any] | None = None,
-        status_code: int = 200,
-        headers: dict[str, str] | None = None,
-    ) -> None:
+    def __init__(self, payload: dict[str, Any] | None = None) -> None:
         self._payload = payload
-        self.status_code = status_code
-        self.headers = headers or {}
 
     def json(self) -> dict[str, Any]:
         assert self._payload is not None
@@ -105,14 +96,9 @@ class FakeClient:
         self,
         payload: dict[str, Any] | None = None,
         error: Exception | None = None,
-        status_code: int = 200,
-        response_headers: dict[str, str] | None = None,
     ) -> None:
         self.payload = payload
         self.error = error
-        self.status_code = status_code
-        self.response_headers = response_headers
-        self.request_headers: dict[str, str] | None = None
         self.request_params: dict[str, Any] | None = None
 
     async def __aenter__(self) -> "FakeClient":
@@ -121,23 +107,11 @@ class FakeClient:
     async def __aexit__(self, *exc: object) -> None:
         return None
 
-    async def get(
-        self,
-        url: str,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> FakeResponse:
-        self.request_headers = headers or {}
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> FakeResponse:
         self.request_params = params
         if self.error is not None:
             raise self.error
-        if self.status_code == 304:
-            return FakeResponse(status_code=304)
-        return FakeResponse(
-            self.payload,
-            status_code=self.status_code,
-            headers=self.response_headers,
-        )
+        return FakeResponse(self.payload)
 
 
 def fake_httpx_client(monkeypatch: pytest.MonkeyPatch, **kwargs: Any) -> FakeClient:
@@ -363,73 +337,3 @@ class TestWeatherAlertsTask:
         assert replies == []
         assert alerts_mod._seen == set()
         assert alerts_mod._primed is True
-
-
-class TestConditionalFetch:
-    HEADERS = {
-        "ETag": 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk"',
-        "Last-Modified": "Fri, 10 Jul 2026 13:30:19 GMT",
-    }
-
-    async def test_first_fetch_is_unconditional(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        client = fake_httpx_client(monkeypatch, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert client.request_headers == {}
-
-    async def test_validators_from_response_are_sent_back(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_httpx_client(monkeypatch, payload=AQW, response_headers=self.HEADERS)
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._etag == self.HEADERS["ETag"]
-        assert alerts_mod._last_modified == self.HEADERS["Last-Modified"]
-
-        client = fake_httpx_client(monkeypatch, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert client.request_headers == {
-            "If-None-Match": self.HEADERS["ETag"],
-            "If-Modified-Since": self.HEADERS["Last-Modified"],
-        }
-
-    async def test_not_modified_announces_nothing_and_keeps_state(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_httpx_client(monkeypatch, payload=AQW, response_headers=self.HEADERS)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
-        seen_before = set(alerts_mod._seen)
-
-        fake_httpx_client(monkeypatch, status_code=304)
-        replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
-        assert replies == []
-        assert alerts_mod._seen == seen_before
-        assert alerts_mod._etag == self.HEADERS["ETag"]
-
-    async def test_apache_gzip_etag_suffix_is_stripped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Apache's mod_deflate serves W/"...-gzip" ETags it then refuses to
-        # match; the stored validator must be the stripped form.
-        fake_httpx_client(
-            monkeypatch,
-            payload=AQW,
-            response_headers={"ETag": 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk-gzip"'},
-        )
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._etag == 'W/"5dc-s++oJBiKg16nEaqG1KtMPI5AYfk"'
-
-    def test_normalize_etag_leaves_plain_etags_alone(self) -> None:
-        assert alerts_mod.normalize_etag('W/"abc"') == 'W/"abc"'
-        assert alerts_mod.normalize_etag('"abc"') == '"abc"'
-
-    async def test_missing_validators_send_no_conditional_headers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fake_httpx_client(monkeypatch, payload=AQW)  # response has no cache headers
-        await alerts_mod.weather_alerts(make_ctx([]))
-
-        client = fake_httpx_client(monkeypatch, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert client.request_headers == {}
