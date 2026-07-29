@@ -16,8 +16,10 @@ several Features that share one weather bulletin. They're deduped on the
 bulletin id (see ``alert_key``), and then on the announced text, since one
 weather event reaches Ottawa as several bulletins — one per region, e.g. an
 Ontario-side and a Gatineau special weather statement carrying the same
-headline. When the last alert ends the collection goes empty, and the bot
-announces an all-clear once (guarded by ``_seen`` so it can't repeat).
+headline. Alerts that have ended linger in the collection for hours and
+are ignored (see ``ENDED``), so when the last alert ends the collection
+reads as empty and the bot announces an all-clear once (guarded by
+``_seen`` so it can't repeat).
 """
 
 from __future__ import annotations
@@ -48,9 +50,18 @@ _PARAMS = {
     "limit": 100,
     "skipGeometry": "true",
     "properties": (
-        "id,feature_id,alert_name_en,alert_code,publication_datetime,alert_text_en"
+        "id,feature_id,alert_name_en,alert_code,publication_datetime,"
+        "alert_text_en,status_en"
     ),
 }
+
+# An alert that's over stays in the collection until its expiration
+# datetime, up to about a day later, carrying status_en "ended" (the live
+# values are "issued", "continued" and "ended"). Those are dropped: nothing
+# is announced for weather that's already past, and the collection reads as
+# empty as soon as the last real alert ends, so the all-clear goes out then
+# rather than a day late.
+ENDED = "ended"
 
 # MeshCore truncates a channel message past ~140 UTF-8 bytes, so an alert
 # only carries its headline when the two together stay under that.
@@ -131,19 +142,20 @@ def _title(props: dict[str, Any], key: str) -> str:
 
 
 def parse_alerts(payload: dict[str, Any]) -> list[Alert]:
-    """Return one Alert per distinct announcement, oldest-first.
+    """Return one Alert per distinct announcement in effect, oldest-first.
 
-    Features collapse twice: first on the bulletin id, so the several
-    polygons of one alert become one Alert, then on the announced text, so
-    the per-region bulletins of one weather event become one message rather
-    than several identical ones. The result is ordered by publication time
-    so several alerts found in one fetch are announced oldest-first.
+    Alerts that have ended are dropped. What's left collapses twice: first
+    on the bulletin id, so the several polygons of one alert become one
+    Alert, then on the announced text, so the per-region bulletins of one
+    weather event become one message rather than several identical ones.
+    The result is ordered by publication time so several alerts found in
+    one fetch are announced oldest-first.
     """
     by_key: dict[str, Alert] = {}
     for feature in payload.get("features") or []:
         props = feature.get("properties") or {}
         alert_id = (props.get("id") or "").strip()
-        if not alert_id:
+        if not alert_id or props.get("status_en") == ENDED:
             continue
         key = alert_key(alert_id, props.get("feature_id"))
         by_key.setdefault(

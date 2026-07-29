@@ -82,6 +82,33 @@ AQW = {
 EMPTY: dict[str, Any] = {"type": "FeatureCollection", "features": []}
 
 
+def ended(payload: dict[str, Any]) -> dict[str, Any]:
+    """A copy of *payload* with every alert in it marked as over.
+
+    Environment Canada leaves an alert in the collection once it's over,
+    flagged status_en "ended", until its expiration datetime hours later.
+    The bulletin also picks up a closing line of its own (the text here is
+    a real one), which changes the announced text and would otherwise read
+    as a fresh alert.
+    """
+    closing = (
+        "Severe thunderstorms associated with this alert have weakened or "
+        "moved out of the area."
+    )
+    features = [
+        {
+            **feature,
+            "properties": {
+                **feature["properties"],
+                "status_en": "ended",
+                "alert_text_en": closing,
+            },
+        }
+        for feature in payload["features"]
+    ]
+    return {**payload, "features": features}
+
+
 def with_feature(
     payload: dict[str, Any],
     *,
@@ -309,6 +336,27 @@ class TestParseAlerts:
     def test_no_active_alerts_returns_empty(self) -> None:
         assert alerts_mod.parse_alerts(EMPTY) == []
 
+    def test_alerts_that_have_ended_are_dropped(self) -> None:
+        assert alerts_mod.parse_alerts(ended(AQW)) == []
+
+    def test_an_alert_that_ended_leaves_the_live_ones_alone(self) -> None:
+        payload = {
+            **AQW,
+            "features": [
+                *ended(AQW)["features"],
+                *with_feature(
+                    EMPTY,
+                    id="88888_fea1",
+                    feature_id="fea1",
+                    name="tornado warning",
+                    published="2026-07-16T22:13:50.000Z",
+                )["features"],
+            ],
+        }
+        assert [a.title for a in alerts_mod.parse_alerts(payload)] == [
+            "Tornado Warning"
+        ]
+
     def test_feature_without_id_is_skipped(self) -> None:
         payload = {"features": [{"properties": {"alert_name_en": "x"}}]}
         assert alerts_mod.parse_alerts(payload) == []
@@ -491,6 +539,37 @@ class TestWeatherAlertsTask:
         replies = []
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
+
+    async def test_all_clear_fires_while_the_ended_alert_lingers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The ended bulletin sits in the collection for hours after the
+        # weather is over; the all-clear must not wait for it to age out.
+        fake_httpx_client(monkeypatch, payload=AQW)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        fake_httpx_client(monkeypatch, payload=ended(AQW))
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == ["No alerts in effect"]
+
+    async def test_an_alert_ending_is_not_announced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The closing line an ended bulletin picks up would otherwise read
+        # as a new alert, since it changes the announced text.
+        fake_httpx_client(monkeypatch, payload=EMPTY)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        fake_httpx_client(monkeypatch, payload=AQW)
+        replies: list[str] = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == ["Air Quality Warning"]
+
+        fake_httpx_client(monkeypatch, payload=ended(AQW))
+        replies = []
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == ["No alerts in effect"]
 
     async def test_seen_alerts_are_pruned_when_alerts_leave(
         self, monkeypatch: pytest.MonkeyPatch
