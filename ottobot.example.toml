@@ -34,3 +34,14 @@ database = "/data/ottobot.db"
 # public channel is mirrored to that Discord webhook. Omit to disable.
 # [discord]
 # webhook_url = "https://discord.com/api/webhooks/123456789/abcdefg"
+
+# OpenTelemetry tracing, exported to Honeycomb. With no key here (and none in
+# the HONEYCOMB_API_KEY environment variable) tracing stays off entirely.
+# Spans cover each incoming message, the sinks and command it runs, each
+# scheduled task run, every transmission to the radio, and the outgoing HTTP
+# calls handlers make.
+# [telemetry]
+# honeycomb_api_key = "hcaik_..."
+# dataset = "ottobot"                     # only needed for Classic keys
+# service_name = "ottobot"                # defaults to the bot's name
+# endpoint = "https://api.honeycomb.io"   # EU: https://api.eu1.honeycomb.io
