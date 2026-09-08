@@ -5,7 +5,6 @@ API key::
 
     [telemetry]
     honeycomb_api_key = "hcaik_..."   # or the HONEYCOMB_API_KEY env var
-    dataset = "ottobot"               # only needed for Classic keys
     service_name = "ottobot"          # defaults to the bot's name
     endpoint = "https://api.honeycomb.io"   # EU: https://api.eu1.honeycomb.io
 
@@ -24,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import os
-from importlib.metadata import PackageNotFoundError, version
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -42,11 +40,9 @@ logger = logging.getLogger(__name__)
 HONEYCOMB_ENDPOINT = "https://api.honeycomb.io"
 TRACES_PATH = "/v1/traces"
 
-# Honeycomb authenticates with the team key in this header. Classic keys
-# (32 hex chars) additionally need the dataset named in x-honeycomb-dataset;
-# newer keys carry the dataset in the service name instead.
+# Honeycomb authenticates with the team key in this header; the dataset a
+# span lands in comes from its service name.
 TEAM_HEADER = "x-honeycomb-team"
-DATASET_HEADER = "x-honeycomb-dataset"
 
 # Read when the config leaves honeycomb_api_key unset, so a deployment can
 # pass the key as a secret instead of writing it into ottobot.toml.
@@ -81,21 +77,6 @@ def traces_endpoint(config: TelemetryConfig) -> str:
     return f"{base}{TRACES_PATH}"
 
 
-def headers(config: TelemetryConfig, key: str) -> dict[str, str]:
-    """Honeycomb's auth headers; the dataset one only when it's configured."""
-    sent = {TEAM_HEADER: key}
-    if config.dataset:
-        sent[DATASET_HEADER] = config.dataset
-    return sent
-
-
-def _service_version() -> str:
-    try:
-        return version("ottobot")
-    except PackageNotFoundError:  # running from a source tree, not installed
-        return "unknown"
-
-
 def build_tracer_provider(config: BotConfig) -> TracerProvider | None:
     """A provider exporting spans to Honeycomb, or None if no key is set."""
     telemetry = config.telemetry
@@ -103,15 +84,10 @@ def build_tracer_provider(config: BotConfig) -> TracerProvider | None:
     if not key:
         return None
     service_name = telemetry.service_name or config.name or "ottobot"
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "service.version": _service_version(),
-        }
-    )
+    resource = Resource.create({"service.name": service_name})
     exporter = OTLPSpanExporter(
         endpoint=traces_endpoint(telemetry),
-        headers=headers(telemetry, key),
+        headers={TEAM_HEADER: key},
     )
     provider = TracerProvider(resource=resource)
     # Batched: exporting is an HTTP round trip and handlers run on the

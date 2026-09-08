@@ -38,13 +38,12 @@ class TelemetryConfig:
     """OpenTelemetry/Honeycomb settings; see ``ottobot.telemetry``.
 
     Tracing stays off until a Honeycomb key is available, either here or
-    in the HONEYCOMB_API_KEY environment variable. dataset is only needed
-    for Honeycomb Classic keys, service_name defaults to the bot's name,
-    and endpoint defaults to Honeycomb's US ingest.
+    in the HONEYCOMB_API_KEY environment variable. service_name (which is
+    also the Honeycomb dataset the spans land in) defaults to the bot's
+    name, and endpoint defaults to Honeycomb's US ingest.
     """
 
     honeycomb_api_key: str | None = None
-    dataset: str | None = None
     service_name: str | None = None
     endpoint: str | None = None
 
@@ -98,7 +97,6 @@ def parse_telemetry(data: dict) -> TelemetryConfig:
     """Build a TelemetryConfig from the config's [telemetry] table."""
     return TelemetryConfig(
         honeycomb_api_key=_optional_str(data.get("honeycomb_api_key")),
-        dataset=_optional_str(data.get("dataset")),
         service_name=_optional_str(data.get("service_name")),
         endpoint=_optional_str(data.get("endpoint")),
     )

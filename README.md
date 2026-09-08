@@ -88,14 +88,13 @@ API key is configured — either in the config file:
 ```toml
 [telemetry]
 honeycomb_api_key = "hcaik_..."
-dataset = "ottobot"                     # only needed for Classic keys
 service_name = "ottobot"                # defaults to the bot's name
 endpoint = "https://api.honeycomb.io"   # EU: https://api.eu1.honeycomb.io
 ```
 
 or, to keep the key out of the file, in the `HONEYCOMB_API_KEY` environment
-variable (the config file wins if both are set). The Compose file has a
-commented-out line that passes it through to the container.
+variable (the config file wins if both are set). The service name doubles as
+the Honeycomb dataset the spans land in.
 
 One trace is recorded per incoming message, with a span for each sink and for
 the command that runs, and one trace per scheduled task run. Every

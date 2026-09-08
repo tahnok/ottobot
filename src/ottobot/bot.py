@@ -170,12 +170,7 @@ class Ottobot:
         return text, False
 
     async def dispatch(self, message: IncomingMessage, reply: ReplyFunc) -> None:
-        """Handle one incoming message.
-
-        Traced as the root span for everything the message sets off (see
-        ottobot.telemetry); the span records why a message went unanswered
-        in "ottobot.outcome", which is a no-op when tracing is off.
-        """
+        """Handle one incoming message."""
         with tracer().start_as_current_span(
             "dispatch",
             attributes={

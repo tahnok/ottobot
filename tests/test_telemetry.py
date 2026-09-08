@@ -20,11 +20,9 @@ from ottobot.config import BotConfig, TelemetryConfig, parse_config
 from ottobot.runner import MeshCoreRunner
 from ottobot.telemetry import (
     API_KEY_ENV,
-    DATASET_HEADER,
     TEAM_HEADER,
     api_key,
     build_tracer_provider,
-    headers,
     traces_endpoint,
 )
 
@@ -66,7 +64,6 @@ class TestConfig:
             {
                 "telemetry": {
                     "honeycomb_api_key": "key",
-                    "dataset": "mesh",
                     "service_name": "ottobot-test",
                     "endpoint": "https://api.eu1.honeycomb.io",
                 }
@@ -74,7 +71,6 @@ class TestConfig:
         )
         assert config.telemetry == TelemetryConfig(
             honeycomb_api_key="key",
-            dataset="mesh",
             service_name="ottobot-test",
             endpoint="https://api.eu1.honeycomb.io",
         )
@@ -110,13 +106,6 @@ class TestHoneycombSettings:
     def test_endpoint_override_gets_the_traces_path(self) -> None:
         config = TelemetryConfig(endpoint="https://api.eu1.honeycomb.io/")
         assert traces_endpoint(config) == "https://api.eu1.honeycomb.io/v1/traces"
-
-    def test_headers_carry_the_key(self) -> None:
-        assert headers(TelemetryConfig(), "key") == {TEAM_HEADER: "key"}
-
-    def test_dataset_header_is_sent_when_configured(self) -> None:
-        sent = headers(TelemetryConfig(dataset="mesh"), "key")
-        assert sent == {TEAM_HEADER: "key", DATASET_HEADER: "mesh"}
 
 
 class TestTracerProvider:
@@ -318,7 +307,6 @@ class TestExport:
                 name="ottobot",
                 telemetry=TelemetryConfig(
                     honeycomb_api_key="key",
-                    dataset="mesh",
                     endpoint=f"http://127.0.0.1:{httpd.server_address[1]}",
                 ),
             )
@@ -335,7 +323,6 @@ class TestExport:
         path, sent_headers, body = received[0]
         assert path == "/v1/traces"
         assert sent_headers[TEAM_HEADER] == "key"
-        assert sent_headers[DATASET_HEADER] == "mesh"
         # The payload is protobuf; the span and service names are legible in it.
         assert b"smoke" in body
         assert b"ottobot" in body

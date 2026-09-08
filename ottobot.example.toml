@@ -42,6 +42,5 @@ database = "/data/ottobot.db"
 # calls handlers make.
 # [telemetry]
 # honeycomb_api_key = "hcaik_..."
-# dataset = "ottobot"                     # only needed for Classic keys
 # service_name = "ottobot"                # defaults to the bot's name
 # endpoint = "https://api.honeycomb.io"   # EU: https://api.eu1.honeycomb.io

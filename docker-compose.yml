@@ -83,13 +83,6 @@ services:
       PYTHONUNBUFFERED: "1"
       XDG_CACHE_HOME: "/tmp/.cache"
       TZ: "America/Toronto"
-      # --- Tracing -----------------------------------------------------------
-      # Uncomment to send OpenTelemetry traces to Honeycomb, taking the key
-      # from the host's environment (or a .env file next to this one) instead
-      # of writing it into ottobot.toml. The rest of the settings live in the
-      # config's [telemetry] table; with no key, tracing stays off.
-      #
-      # HONEYCOMB_API_KEY: "${HONEYCOMB_API_KEY:-}"
 
     # Drop Linux capabilities. Serial access is granted by `devices:` plus
     # `group_add:`, not by capabilities.
