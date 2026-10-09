@@ -225,28 +225,58 @@ class Ottobot:
                 self.name,
             )
             return "not_addressed"
+        return await self._run_command(command, message, args, reply, span)
+
+    async def _run_command(
+        self,
+        command: Command,
+        message: IncomingMessage,
+        args: str,
+        reply: ReplyFunc,
+        span: Span,
+    ) -> str:
+        """Run *command*'s handler and send what it produces.
+
+        Returns the dispatch outcome. The replies are counted rather than
+        read off the return value: a handler can answer with any number of
+        ctx.reply() calls and return None, and one that answers nothing at
+        all (e.g. a command that only acts on some channels) should not be
+        recorded as having replied.
+        """
+        sent = 0
+
+        async def counted_reply(text: str) -> None:
+            nonlocal sent
+            sent += 1
+            await reply(text)
+
         ctx = Context(
             message=message,
             command_name=command.name,
             args=args,
-            _reply=reply,
+            _reply=counted_reply,
             config=self.config,
         )
-        with tracer().start_as_current_span(
-            f"command {command.name}",
-            attributes={"ottobot.command": command.name, "ottobot.args": args},
-        ) as command_span:
-            try:
-                result = await command.handler(ctx)
-            except Exception as exc:
-                logger.exception("command %r raised", command.name)
-                command_span.record_exception(exc)
-                command_span.set_status(StatusCode.ERROR)
-                await reply(f"Sorry, {self.prefix}{command.name} hit an error.")
-                return "error"
-        if result is not None:
-            await reply(result)
-        return "replied"
+        try:
+            with tracer().start_as_current_span(
+                f"command {command.name}",
+                attributes={"ottobot.command": command.name, "ottobot.args": args},
+            ) as command_span:
+                try:
+                    result = await command.handler(ctx)
+                except Exception as exc:
+                    logger.exception("command %r raised", command.name)
+                    command_span.record_exception(exc)
+                    command_span.set_status(StatusCode.ERROR)
+                    await counted_reply(
+                        f"Sorry, {self.prefix}{command.name} hit an error."
+                    )
+                    return "error"
+            if result is not None:
+                await counted_reply(result)
+            return "replied" if sent else "no_reply"
+        finally:
+            span.set_attribute("ottobot.replies", sent)
 
     async def _run_sink(
         self, sink: CommandHandler, ctx: Context, reply: ReplyFunc

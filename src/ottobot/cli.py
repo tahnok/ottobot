@@ -93,12 +93,11 @@ async def run(args: argparse.Namespace) -> None:
     if config.log_level:
         logging.getLogger().setLevel(config.log_level)
     quiet_http_request_logs()
-    # A no-op unless the config (or HONEYCOMB_API_KEY) supplies a key; the
-    # shutdown flushes whatever spans are still buffered on the way out.
-    start_telemetry(config)
     try:
         await _run(args, config)
     finally:
+        # Flushes whatever spans are still buffered on the way out; a no-op
+        # when telemetry was never started.
         shutdown_telemetry()
 
 
@@ -106,6 +105,7 @@ async def _run(args: argparse.Namespace, config: BotConfig) -> None:
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
+        start_telemetry(config, name)
         bot = build_bot(name=name, config=config)
         await bot.setup()
         await Simulator(bot).repl()
@@ -123,6 +123,9 @@ async def _run(args: argparse.Namespace, config: BotConfig) -> None:
                 "could not determine the bot's name: the device reports none. "
                 "Pass --name or set name in the config to set one."
             )
+        # Started here, not before connecting: the name the device reports
+        # is the service the spans are attributed to (see ottobot.telemetry).
+        start_telemetry(config, name)
         bot = build_bot(name=name, config=config)
         await bot.setup()
         runner = MeshCoreRunner(bot, mc)
