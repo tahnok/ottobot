@@ -72,10 +72,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def quiet_http_request_logs() -> None:
+    """Keep httpx's per-request logging at DEBUG verbosity.
+
+    httpx logs one INFO line per request, so every Discord webhook post and
+    weather-alert fetch shows up in the INFO log. Demote httpx (and its
+    httpcore transport) to WARNING so those lines only surface when the root
+    level has been turned down to DEBUG; leave them alone when it already is.
+    """
+    if logging.getLogger().getEffectiveLevel() > logging.DEBUG:
+        for name in ("httpx", "httpcore"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+
 async def run(args: argparse.Namespace) -> None:
     config = load_config(args.config) if args.config else BotConfig()
     if config.log_level:
         logging.getLogger().setLevel(config.log_level)
+    quiet_http_request_logs()
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
