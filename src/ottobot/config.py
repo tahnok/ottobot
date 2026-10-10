@@ -16,18 +16,36 @@ it stays easy to unit-test. Example file:
 
     [discord]
     webhook_url = "https://discord.com/api/webhooks/..."  # optional sink
+
+    [telemetry]
+    honeycomb_api_key = "hcaik_..."   # optional; enables tracing
 """
 
 from __future__ import annotations
 
 import logging
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ottobot.channels import CHANNELS, ChannelConfig
 
 PRIVATE_KEY_LEN = 64
+
+
+@dataclass(frozen=True)
+class TelemetryConfig:
+    """OpenTelemetry/Honeycomb settings; see ``ottobot.telemetry``.
+
+    Tracing stays off until a Honeycomb key is available, either here or
+    in the HONEYCOMB_API_KEY environment variable. service_name (which is
+    also the Honeycomb dataset the spans land in) defaults to the bot's
+    name, and endpoint defaults to Honeycomb's US ingest.
+    """
+
+    honeycomb_api_key: str | None = None
+    service_name: str | None = None
+    endpoint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +63,9 @@ class BotConfig:
     # Discord incoming-webhook URL; when set, the discord sink mirrors
     # public-channel messages to it. None disables the sink.
     discord_webhook_url: str | None = None
+
+    # Tracing settings; inert unless a Honeycomb key is configured.
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
 
 
 def _decode_hex(value: str, field_name: str, expected_len: int) -> bytes:
@@ -68,6 +89,19 @@ def _parse_log_level(value: object) -> str:
     return name
 
 
+def _optional_str(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
+def parse_telemetry(data: dict) -> TelemetryConfig:
+    """Build a TelemetryConfig from the config's [telemetry] table."""
+    return TelemetryConfig(
+        honeycomb_api_key=_optional_str(data.get("honeycomb_api_key")),
+        service_name=_optional_str(data.get("service_name")),
+        endpoint=_optional_str(data.get("endpoint")),
+    )
+
+
 def parse_config(data: dict) -> BotConfig:
     """Build a BotConfig from already-parsed TOML data."""
     private_key_hex = data.get("private_key")
@@ -83,6 +117,7 @@ def parse_config(data: dict) -> BotConfig:
     webhook_url = discord.get("webhook_url")
     discord_webhook_url = str(webhook_url) if webhook_url is not None else None
     database = data.get("database")
+    telemetry = parse_telemetry(data.get("telemetry", {}))
 
     return BotConfig(
         name=str(name) if name is not None else None,
@@ -90,6 +125,7 @@ def parse_config(data: dict) -> BotConfig:
         log_level=log_level,
         discord_webhook_url=discord_webhook_url,
         database=Path(database) if database is not None else None,
+        telemetry=telemetry,
     )
 
 

@@ -50,7 +50,9 @@ live one-per-file in `src/ottobot/commands/`, auto-discovered by
 `src/ottobot/sinks/`, loaded by `load_sinks()`. Scheduled tasks (handlers
 the runner calls on a timer instead of in response to a message) live in
 `src/ottobot/tasks/`, loaded by `load_tasks()`. `cli.py` wires it all
-together as the `ottobot` entry point.
+together as the `ottobot` entry point. `telemetry.py` sets up OpenTelemetry
+tracing to Honeycomb; it is inert unless a Honeycomb key is configured, so
+handlers can record spans unconditionally.
 
 ## Key conventions
 

@@ -9,7 +9,9 @@ Then message the node "@[ottobot] !help" on a channel to see commands.
 Pass --config ottobot.toml to make a TOML file the source of truth for the
 bot's name and key pair; those settings are pushed onto the device on startup.
 See ottobot.example.toml for the format. (The channels and radio preset are
-hardcoded in code, not config — see ottobot.channels / ottobot.radio.)
+hardcoded in code, not config — see ottobot.channels / ottobot.radio.) The
+config's [telemetry] table also turns on OpenTelemetry tracing to Honeycomb
+— see ottobot.telemetry.
 
 To try commands locally without a device or touching the mesh:
 
@@ -30,6 +32,7 @@ from .runner import MeshCoreRunner, apply_settings, connect
 from .sinks import load_sinks
 from .simulator import Simulator
 from .tasks import load_tasks
+from .telemetry import shutdown_telemetry, start_telemetry
 
 
 def build_bot(name: str, prefix: str = "!", config: BotConfig | None = None) -> Ottobot:
@@ -90,9 +93,19 @@ async def run(args: argparse.Namespace) -> None:
     if config.log_level:
         logging.getLogger().setLevel(config.log_level)
     quiet_http_request_logs()
+    try:
+        await _run(args, config)
+    finally:
+        # Flushes whatever spans are still buffered on the way out; a no-op
+        # when telemetry was never started.
+        shutdown_telemetry()
+
+
+async def _run(args: argparse.Namespace, config: BotConfig) -> None:
     if args.simulate:
         # No device to ask, so fall back to the config name or a default.
         name = args.name or config.name or "ottobot"
+        start_telemetry(config, name)
         bot = build_bot(name=name, config=config)
         await bot.setup()
         await Simulator(bot).repl()
@@ -110,6 +123,9 @@ async def run(args: argparse.Namespace) -> None:
                 "could not determine the bot's name: the device reports none. "
                 "Pass --name or set name in the config to set one."
             )
+        # Started here, not before connecting: the name the device reports
+        # is the service the spans are attributed to (see ottobot.telemetry).
+        start_telemetry(config, name)
         bot = build_bot(name=name, config=config)
         await bot.setup()
         runner = MeshCoreRunner(bot, mc)

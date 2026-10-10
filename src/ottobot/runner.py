@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from meshcore import EventType, MeshCore
 from meshcore.events import Event, Subscription
+from opentelemetry.trace import StatusCode
 
 from .bot import Ottobot
 from .channels import PUBLIC, ChannelConfig, channel_for_index
@@ -21,6 +22,7 @@ from .config import BotConfig
 from .radio import RADIO
 from .context import IncomingMessage, TaskContext
 from .registry import ScheduledTask
+from .telemetry import tracer
 
 logger = logging.getLogger(__name__)
 
@@ -241,13 +243,24 @@ class MeshCoreRunner:
             await self._broadcast(text, scheduled.channel)
 
         ctx = TaskContext(_reply=broadcast, config=self.bot.config)
-        try:
-            result = await scheduled.handler(ctx)
-        except Exception:
-            logger.exception("scheduled task %r raised", scheduled.name)
-            return
-        if result is not None:
-            await broadcast(result)
+        # A task run has no incoming message, so its span is a trace root
+        # of its own (see ottobot.telemetry).
+        with tracer().start_as_current_span(
+            f"task {scheduled.name}",
+            attributes={
+                "ottobot.task": scheduled.name,
+                "ottobot.channel": scheduled.channel.name,
+            },
+        ) as span:
+            try:
+                result = await scheduled.handler(ctx)
+            except Exception as exc:
+                logger.exception("scheduled task %r raised", scheduled.name)
+                span.record_exception(exc)
+                span.set_status(StatusCode.ERROR)
+                return
+            if result is not None:
+                await broadcast(result)
 
     async def _send_chan_msg(self, channel_idx: int, text: str) -> Event:
         """Transmit one channel message, serialized and spaced from the last.
@@ -258,16 +271,26 @@ class MeshCoreRunner:
         wait out the rest of SEND_SPACING_SECONDS since the previous send
         before starting the next.
         """
-        async with self._send_lock:
-            if self._last_send_at is not None:
-                elapsed = asyncio.get_running_loop().time() - self._last_send_at
-                remaining = SEND_SPACING_SECONDS - elapsed
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
-            try:
-                return await self.mc.commands.send_chan_msg(channel_idx, text)
-            finally:
-                self._last_send_at = asyncio.get_running_loop().time()
+        with tracer().start_as_current_span(
+            "send",
+            attributes={"ottobot.channel_idx": channel_idx, "ottobot.text": text},
+        ) as span:
+            async with self._send_lock:
+                if self._last_send_at is not None:
+                    elapsed = asyncio.get_running_loop().time() - self._last_send_at
+                    remaining = SEND_SPACING_SECONDS - elapsed
+                    if remaining > 0:
+                        # Traced too: the wait is why a burst of replies
+                        # trickles out rather than going all at once.
+                        span.set_attribute("ottobot.send_wait_seconds", remaining)
+                        await asyncio.sleep(remaining)
+                try:
+                    result = await self.mc.commands.send_chan_msg(channel_idx, text)
+                finally:
+                    self._last_send_at = asyncio.get_running_loop().time()
+            if result.type == EventType.ERROR:
+                span.set_status(StatusCode.ERROR)
+            return result
 
     async def _broadcast(self, text: str, channel: ChannelConfig) -> None:
         """Send *text* on *channel*.

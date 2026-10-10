@@ -11,6 +11,8 @@ import logging
 from collections.abc import Callable
 from datetime import timedelta
 
+from opentelemetry.trace import Span, StatusCode
+
 from .channels import COMMAND_CHANNELS, ChannelConfig, is_command_channel
 from .config import BotConfig
 from .registry import (
@@ -21,6 +23,7 @@ from .registry import (
     TaskHandler,
 )
 from .context import Context, IncomingMessage, ReplyFunc
+from .telemetry import tracer
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +171,22 @@ class Ottobot:
 
     async def dispatch(self, message: IncomingMessage, reply: ReplyFunc) -> None:
         """Handle one incoming message."""
+        with tracer().start_as_current_span(
+            "dispatch",
+            attributes={
+                "ottobot.channel_idx": message.channel_idx,
+                "ottobot.sender_name": message.sender_name or "",
+                "ottobot.text": message.text,
+                "ottobot.path": message.path_description,
+            },
+        ) as span:
+            outcome = await self._dispatch(message, reply, span)
+            span.set_attribute("ottobot.outcome", outcome)
 
+    async def _dispatch(
+        self, message: IncomingMessage, reply: ReplyFunc, span: Span
+    ) -> str:
+        """Run the sinks, then the addressed command. Returns the outcome."""
         sink_ctx = Context(
             message=message,
             command_name=None,
@@ -177,23 +195,19 @@ class Ottobot:
             config=self.config,
         )
         for sink in self.sinks:
-            try:
-                result = await sink(sink_ctx)
-            except Exception:
-                logger.exception("sink %r raised", getattr(sink, "__name__", sink))
-                continue
-            if result is not None:
-                await reply(result)
+            await self._run_sink(sink, sink_ctx, reply)
 
         text, addressed = self.strip_address(message.text)
+        span.set_attribute("ottobot.addressed", addressed)
         parsed = self.parse(text)
         if parsed is None:
-            return
+            return "not_a_command"
         name, args = parsed
         command = self.get_command(name)
         if command is None:
             logger.debug("ignoring unknown command %r", name)
-            return
+            return "unknown_command"
+        span.set_attribute("ottobot.command", command.name)
         # Commands are only answered on the designated command channels, so
         # bot conversations stay off e.g. the public and alert channels.
         if not is_command_channel(message.channel_idx, self.command_channels):
@@ -202,7 +216,7 @@ class Ottobot:
                 command.name,
                 message.channel_idx,
             )
-            return
+            return "not_a_command_channel"
         # Only answer when addressed by name, unless the command opts out.
         if command.requires_address and not addressed:
             logger.debug(
@@ -210,20 +224,73 @@ class Ottobot:
                 command.name,
                 self.name,
             )
-            return
+            return "not_addressed"
+        return await self._run_command(command, message, args, reply, span)
+
+    async def _run_command(
+        self,
+        command: Command,
+        message: IncomingMessage,
+        args: str,
+        reply: ReplyFunc,
+        span: Span,
+    ) -> str:
+        """Run *command*'s handler and send what it produces.
+
+        Returns the dispatch outcome. The replies are counted rather than
+        read off the return value: a handler can answer with any number of
+        ctx.reply() calls and return None, and one that answers nothing at
+        all (e.g. a command that only acts on some channels) should not be
+        recorded as having replied.
+        """
+        sent = 0
+
+        async def counted_reply(text: str) -> None:
+            nonlocal sent
+            sent += 1
+            await reply(text)
+
         ctx = Context(
             message=message,
             command_name=command.name,
             args=args,
-            _reply=reply,
+            _reply=counted_reply,
             config=self.config,
         )
         try:
-            result = await command.handler(ctx)
-        except Exception:
-            logger.exception("command %r raised", command.name)
-            await reply(f"Sorry, {self.prefix}{command.name} hit an error.")
-            return
+            with tracer().start_as_current_span(
+                f"command {command.name}",
+                attributes={"ottobot.command": command.name, "ottobot.args": args},
+            ) as command_span:
+                try:
+                    result = await command.handler(ctx)
+                except Exception as exc:
+                    logger.exception("command %r raised", command.name)
+                    command_span.record_exception(exc)
+                    command_span.set_status(StatusCode.ERROR)
+                    await counted_reply(
+                        f"Sorry, {self.prefix}{command.name} hit an error."
+                    )
+                    return "error"
+            if result is not None:
+                await counted_reply(result)
+            return "replied" if sent else "no_reply"
+        finally:
+            span.set_attribute("ottobot.replies", sent)
+
+    async def _run_sink(
+        self, sink: CommandHandler, ctx: Context, reply: ReplyFunc
+    ) -> None:
+        """Run one sink, tracing it and swallowing anything it raises."""
+        name = getattr(sink, "__name__", repr(sink))
+        with tracer().start_as_current_span(f"sink {name}") as span:
+            try:
+                result = await sink(ctx)
+            except Exception as exc:
+                logger.exception("sink %r raised", name)
+                span.record_exception(exc)
+                span.set_status(StatusCode.ERROR)
+                return
         if result is not None:
             await reply(result)
 

@@ -76,7 +76,47 @@ The config also has an optional `database` key for the sqlite file stateful
 sinks use (the welcome sink greets each channel name once and remembers who
 it has seen there). It defaults to `ottobot.db` in the working directory; in
 Docker, set it to `/data/ottobot.db` so it persists on the bind-mounted
-`./data` dir.
+`./data` dir. An optional `[telemetry]` table turns on
+[tracing to Honeycomb](#tracing-with-honeycomb).
+
+## Tracing with Honeycomb
+
+The bot can emit [OpenTelemetry](https://opentelemetry.io/) traces and send
+them to [Honeycomb](https://www.honeycomb.io/). It is off unless a Honeycomb
+API key is configured — either in the config file:
+
+```toml
+[telemetry]
+honeycomb_api_key = "hcaik_..."
+service_name = "ottobot"                # defaults to the name the bot runs as
+endpoint = "https://api.honeycomb.io"   # EU: https://api.eu1.honeycomb.io
+```
+
+or, to keep the key out of the file, in the `HONEYCOMB_API_KEY` environment
+variable (the config file wins if both are set). The service name doubles as
+the Honeycomb dataset the spans land in; left unset it is the name the bot is
+actually running under — `--name`, the config's `name`, or whatever the device
+advertises — so a node started as `ottobot-dev` reports itself that way
+instead of landing in the production dataset.
+
+One trace is recorded per incoming message, with a span for each sink and for
+the command that runs, and one trace per scheduled task run. Every
+transmission to the radio is a span too (including the wait that spaces
+back-to-back sends apart), as are the HTTP calls handlers make with `httpx`
+— so a slow weather API shows up as a slow child span of the message that
+asked for it. Spans carry the channel, the (spoofable) sender name, the
+message text, the command and its arguments, how many replies went out, and
+an `ottobot.outcome` recording what became of the message: `replied`,
+`no_reply`, `error`, or why no command ran at all (`not_a_command`,
+`unknown_command`, `not_a_command_channel`, `not_addressed`).
+
+Secrets the config holds — the Discord webhook URL, whose path is itself a
+credential, and the Honeycomb key — are stripped from the URLs on those HTTP
+spans, so enabling tracing does not export them. A new secret added to the
+config belongs in `secret_values()` in `src/ottobot/telemetry.py`.
+
+Handlers themselves need no telemetry code: with no key configured the spans
+are no-ops, so there is nothing to guard.
 
 ## Running with Docker
 
