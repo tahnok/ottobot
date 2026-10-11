@@ -24,6 +24,10 @@ class IncomingMessage:
     means N+1 bytes per hop (mode 0 = legacy 1-byte hashes, mode 2 =
     3-byte hashes).
 
+    packet_hash is the hex hash Beacon identifies the packet by (see
+    ottobot.beacon), when the transport could match the message to the raw
+    packet it arrived in; None otherwise.
+
     raw is the unmodified event payload from the transport — for meshcore,
     the CHANNEL_MSG_RECV payload dict (SNR, sender_timestamp, txt_type, ...).
     It is an escape hatch for transport data the framework doesn't model;
@@ -36,6 +40,7 @@ class IncomingMessage:
     path_len: int | None = None
     path: str | None = None
     path_hash_mode: int | None = None
+    packet_hash: str | None = None
     raw: dict[str, Any] | None = None
 
     @property

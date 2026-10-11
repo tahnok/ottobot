@@ -1,0 +1,10 @@
+# Short links for ottobot's mesh replies, which have to fit in ~140
+# characters. m.tahnok.ca/<packet hash> redirects to that packet on Beacon
+# (see src/ottobot/beacon.py); anything else is a 404.
+m.tahnok.ca {
+	@packet path_regexp packet ^/([0-9a-fA-F]{16})$
+	# Temporary (302), so the target can change without browsers having
+	# cached the old one.
+	redir @packet https://analyzer.meshmapper.net/?hash={re.packet.1}&analyze=1 302
+	respond 404
+}
