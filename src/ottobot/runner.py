@@ -18,12 +18,12 @@ from meshcore import EventType, MeshCore
 from meshcore.events import Event, Subscription
 from opentelemetry.trace import StatusCode
 
-from .beacon import packet_hash
+from .beacon import PAYLOAD_TYPE_TRACE, packet_hash
 from .bot import Ottobot
 from .channels import PUBLIC, ChannelConfig, channel_for_index
 from .config import BotConfig
 from .radio import RADIO
-from .context import IncomingMessage, TaskContext
+from .context import IncomingMessage, TaskContext, split_path
 from .registry import ScheduledTask
 from .telemetry import tracer
 
@@ -56,6 +56,12 @@ SEND_SPACING_SECONDS = 2.0
 
 # MeshCore's GRP_TXT payload type: a channel message.
 PAYLOAD_TYPE_GRP_TXT = 5
+
+# Flood routes, with and without transport codes. Each repeater a flood
+# passes through appends its hash to the path, so the last hash is the
+# repeater the bot heard it from. A direct route's path is the hops still
+# ahead of it instead.
+FLOOD_ROUTE_TYPES = (0, 1)
 
 # How many recently heard channel packets to remember while waiting for the
 # decoded message to be fetched. That normally follows within a second, so
@@ -336,27 +342,75 @@ class MeshCoreRunner:
             await self.stop()
 
     async def _on_rx_log(self, event: Event) -> None:
-        """Remember the Beacon hash of each channel packet the radio hears.
+        """Trace each packet the radio hears, and remember channel packets' hashes.
 
-        The decoded CHANNEL_MSG_RECV that follows carries only the text, not
-        the packet it came in, so the hash is computed here from the raw
-        packet. The library tags a channel packet it could decrypt with a
-        msg_hash of its timestamp and text, which _packet_hash_for
-        recomputes from the decoded message to pair the two up.
+        The decoded CHANNEL_MSG_RECV that follows a channel packet carries
+        only the text, not the packet it came in, so its Beacon hash is
+        computed here from the raw packet. The library tags a channel packet
+        it could decrypt with a msg_hash of its timestamp and text, which
+        _packet_hash_for recomputes from the decoded message to pair the two
+        up.
         """
-        payload = event.payload
-        msg_hash = payload.get("msg_hash")
-        pkt_payload = payload.get("pkt_payload")
+        log = event.payload
+        payload_type = log.get("payload_type")
+        pkt_payload = log.get("pkt_payload")
+        # The library reports a packet too short to parse as type -1.
+        # TRACE packets aren't hashed: Beacon hashes them differently.
+        hash_hex = None
         if (
-            payload.get("payload_type") != PAYLOAD_TYPE_GRP_TXT
-            or msg_hash is None
-            or pkt_payload is None
+            isinstance(payload_type, int)
+            and payload_type >= 0
+            and payload_type != PAYLOAD_TYPE_TRACE
+            and pkt_payload is not None
         ):
+            hash_hex = packet_hash(payload_type, pkt_payload)
+        self._trace_rx_packet(log, hash_hex)
+
+        msg_hash = log.get("msg_hash")
+        if payload_type != PAYLOAD_TYPE_GRP_TXT or msg_hash is None or not hash_hex:
             return
-        self._packet_hashes[msg_hash] = packet_hash(PAYLOAD_TYPE_GRP_TXT, pkt_payload)
+        self._packet_hashes[msg_hash] = hash_hex
         self._packet_hashes.move_to_end(msg_hash)
         while len(self._packet_hashes) > PACKET_HASH_CACHE_SIZE:
             self._packet_hashes.popitem(last=False)
+
+    def _trace_rx_packet(self, log: dict[str, Any], hash_hex: str | None) -> None:
+        """Record one heard packet as a span of its own.
+
+        Every packet the radio hears is reported, not only the channel
+        messages the bot decodes, so the spans describe the mesh around the
+        bot: what traffic it carries, and which repeaters the bot hears and
+        how well. The same packet heard via two repeaters is two spans with
+        one packet_hash.
+        """
+        attributes: dict[str, Any] = {
+            "ottobot.payload_type": log.get("payload_typename", "UNK"),
+            "ottobot.route_type": log.get("route_typename", "UNK"),
+            "ottobot.raw": log.get("payload", ""),
+        }
+        if hash_hex:
+            # Same key as the dispatch span's, so the two can be joined.
+            attributes["ottobot.packet_hash"] = hash_hex
+        for key, name in (
+            ("snr", "ottobot.snr"),
+            ("rssi", "ottobot.rssi"),
+            ("payload_length", "ottobot.payload_length"),
+            ("chan_name", "ottobot.channel"),
+        ):
+            if log.get(key) is not None:
+                attributes[name] = log[key]
+        path = log.get("path")
+        # A TRACE packet's path field holds per-hop SNR readings, not hashes.
+        if log.get("payload_type") != PAYLOAD_TYPE_TRACE and path is not None:
+            hops = split_path(path, log.get("path_hash_size", 1))
+            attributes["ottobot.hops"] = len(hops)
+            attributes["ottobot.path"] = ",".join(hops)
+            if hops and log.get("route_type") in FLOOD_ROUTE_TYPES:
+                attributes["ottobot.last_hop"] = hops[-1]
+        # A heard packet has no parent, so its span is a trace root of its
+        # own (see ottobot.telemetry).
+        with tracer().start_as_current_span("rx packet", attributes=attributes):
+            pass
 
     def _packet_hash_for(self, payload: dict[str, Any]) -> str | None:
         """The Beacon hash of the packet a CHANNEL_MSG_RECV arrived in, if heard."""
