@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, NamedTuple
 
 import pytest
+from meshcore.meshcore_parser import MeshcorePacketParser
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -364,6 +365,90 @@ class TestRunnerSpans:
         span = named(spans, "task boom")
         assert span.status.status_code is StatusCode.ERROR
         assert [e.name for e in span.events] == ["exception"]
+
+
+# test_beacon's GRP_TXT packet, as heard after two repeaters (2-byte hashes
+# a1b2, c3d4) flooded it on.
+HEARD_GRP_TXT = bytes.fromhex(
+    "15"
+    "42"
+    "a1b2c3d4"
+    "1f454e35da0c803c2218dad5ec4db4923ae530abffca81d7cb1e0cfa0b23f87b"
+    "a21f72494f0c79cd925a218a2abf1681c06e9c12664544b3287a2bce1c182a8d"
+    "2f5d08"
+)
+
+
+async def hear(mc: FakeMeshCore, raw: bytes, **radio: Any) -> None:
+    """Deliver *raw* as an RX log event, parsed by the meshcore library itself."""
+    log = await MeshcorePacketParser().parsePacketPayload(
+        raw, {"payload": raw.hex(), "payload_length": len(raw), **radio}
+    )
+    await mc.deliver_rx_log(**log)
+
+
+class TestRxPacketSpans:
+    async def test_heard_packet_is_traced(self, spans: InMemorySpanExporter) -> None:
+        mc = FakeMeshCore()
+        await MeshCoreRunner(Ottobot(name="ottobot"), mc).start()
+
+        await hear(mc, HEARD_GRP_TXT, snr=7.25, rssi=-92)
+
+        span = named(spans, "rx packet")
+        assert span.parent is None
+        assert attributes(span) == {
+            # The hash Beacon gave this packet; the path doesn't change it.
+            "ottobot.packet_hash": "90d5b457307ec193",
+            "ottobot.payload_type": "GRP_TXT",
+            "ottobot.route_type": "FLOOD",
+            "ottobot.raw": HEARD_GRP_TXT.hex(),
+            "ottobot.payload_length": len(HEARD_GRP_TXT),
+            "ottobot.snr": 7.25,
+            "ottobot.rssi": -92,
+            "ottobot.hops": 2,
+            "ottobot.path": "a1b2,c3d4",
+            "ottobot.last_hop": "c3d4",
+        }
+
+    async def test_direct_route_has_no_last_hop(
+        self, spans: InMemorySpanExporter
+    ) -> None:
+        mc = FakeMeshCore()
+        await MeshCoreRunner(Ottobot(name="ottobot"), mc).start()
+
+        # Route type DIRECT (2): the path is the hops still to go.
+        await hear(mc, bytes([0x16]) + HEARD_GRP_TXT[1:])
+
+        span = attributes(named(spans, "rx packet"))
+        assert span["ottobot.route_type"] == "DIRECT"
+        assert span["ottobot.path"] == "a1b2,c3d4"
+        assert "ottobot.last_hop" not in span
+
+    async def test_trace_packet_has_no_hash_or_path(
+        self, spans: InMemorySpanExporter
+    ) -> None:
+        mc = FakeMeshCore()
+        await MeshCoreRunner(Ottobot(name="ottobot"), mc).start()
+
+        # TRACE (type 9), direct, with two per-hop SNR bytes as its path.
+        await hear(mc, bytes.fromhex("26" "02" "1c14" "0102030405060708"))
+
+        span = attributes(named(spans, "rx packet"))
+        assert span["ottobot.payload_type"] == "TRACE"
+        assert "ottobot.packet_hash" not in span
+        assert "ottobot.path" not in span
+
+    async def test_unparseable_packet_is_still_traced(
+        self, spans: InMemorySpanExporter
+    ) -> None:
+        mc = FakeMeshCore()
+        await MeshCoreRunner(Ottobot(name="ottobot"), mc).start()
+
+        await hear(mc, bytes([0x15]))
+
+        span = attributes(named(spans, "rx packet"))
+        assert span["ottobot.payload_type"] == "UNK"
+        assert "ottobot.packet_hash" not in span
 
 
 class TestExport:

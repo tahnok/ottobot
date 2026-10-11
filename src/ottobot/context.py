@@ -9,6 +9,12 @@ from typing import Any
 from .config import BotConfig
 
 
+def split_path(path: str, hash_size: int) -> list[str]:
+    """Split a hex path into its per-hop repeater hashes of *hash_size* bytes."""
+    step = hash_size * 2
+    return [path[i : i + step] for i in range(0, len(path), step)]
+
+
 @dataclass(frozen=True)
 class IncomingMessage:
     """A channel message received from the mesh, normalized away from transport.
@@ -67,10 +73,7 @@ class IncomingMessage:
             return "direct"
         label = "hop" if hops == 1 else "hops"
         if self.path:
-            step = self.path_hash_size * 2
-            route = ",".join(
-                self.path[i : i + step] for i in range(0, len(self.path), step)
-            )
+            route = ",".join(split_path(self.path, self.path_hash_size))
             return f"{hops} {label} via {route}"
         return f"{hops} {label}"
 
