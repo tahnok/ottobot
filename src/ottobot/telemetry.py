@@ -13,8 +13,9 @@ rest of the code records fall through to the API's no-op tracer, so the
 bot behaves exactly as it did before.
 
 Spans are emitted for each incoming message (``dispatch``), each sink and
-command handler it runs, each scheduled task run, and each transmission to
-the device; outgoing HTTP calls made with httpx (weather, hydro, Discord)
+command handler it runs, each scheduled task run, each transmission to
+the device, and each packet the radio hears (``rx packet``, with its
+Beacon packet hash, route, SNR and RSSI); outgoing HTTP calls made with httpx (weather, hydro, Discord)
 are instrumented automatically, so a command's API calls show up as
 children of the message that triggered them.
 """
