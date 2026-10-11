@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import random
+import time
 from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any, Protocol
@@ -49,10 +51,28 @@ PATH_HASH_MODE_2_BYTE = 1
 # Minimum gap between two channel transmissions, in seconds. send_chan_msg
 # returns as soon as the firmware has *queued* a message, not when the radio
 # has finished putting it on the air — which takes up to ~0.5 s at the
-# configured preset (SF7/BW62.5). Firing the next send right away makes the
-# two collide and one is silently lost (seen when a task announces several
-# alerts at once), so sends are serialized and held this far apart.
-SEND_SPACING_SECONDS = 2.0
+# configured preset (SF7/BW62.5). And once on the air, a message keeps the
+# channel busy for seconds more as repeaters re-flood it (Beacon shows a
+# flood lasting ~4.5 s). A send made in that window collides at the bot's
+# repeater and is silently lost (seen with the middle chunk of !help), so
+# sends are serialized and held this far apart.
+SEND_SPACING_SECONDS = 4.0
+
+# How long after a message arrives before replying to it, in seconds, plus a
+# random extra of up to REPLY_JITTER_SECONDS. The message is still being
+# re-flooded when the bot hears it, and a reply sent straight into that
+# flood collides with it (seen as a !ping answered but never heard by
+# anyone). The jitter keeps bots answering the same message (!bots) from
+# all transmitting at once.
+REPLY_DELAY_SECONDS = 3.0
+REPLY_JITTER_SECONDS = 2.0
+
+# How long to wait, after a send, to hear a repeater re-flood it. Every
+# packet the bot sends reaches the mesh through a repeater, so hearing
+# none means the packet was likely lost and is sent again, up to
+# SEND_ATTEMPTS times in all.
+REPEAT_TIMEOUT_SECONDS = 4.0
+SEND_ATTEMPTS = 2
 
 # MeshCore's GRP_TXT payload type: a channel message.
 PAYLOAD_TYPE_GRP_TXT = 5
@@ -80,7 +100,9 @@ class _Commands(Protocol):
     ) -> Event: ...
     async def set_radio(self, freq: float, bw: float, sf: int, cr: int) -> Event: ...
     async def set_path_hash_mode(self, mode: int) -> Event: ...
-    async def send_chan_msg(self, channel_idx: int, text: str) -> Event: ...
+    async def send_chan_msg(
+        self, channel_idx: int, text: str, timestamp: int | None = None
+    ) -> Event: ...
 
 
 class MeshCoreLike(Protocol):
@@ -205,6 +227,15 @@ class MeshCoreRunner:
         # Beacon packet hashes of recently heard channel packets, keyed by
         # the library's message hash (see _on_rx_log / _packet_hash_for).
         self._packet_hashes: OrderedDict[int, str] = OrderedDict()
+        # The send currently waiting to hear a repeater re-flood it, as its
+        # (timestamp, text) and the event set when it's heard. Sends hold
+        # the lock while they wait, so there is at most one.
+        self._awaiting_repeat: tuple[int, str, asyncio.Event] | None = None
+        # Whether the radio has ever reported a repeat of the bot's own
+        # packet. Until it has, not hearing one says nothing about whether a
+        # send was lost (the device may not forward raw packet logs at all),
+        # so sends aren't retried.
+        self._hears_own_repeats = False
 
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
@@ -283,35 +314,87 @@ class MeshCoreRunner:
             if result is not None:
                 await broadcast(result)
 
-    async def _send_chan_msg(self, channel_idx: int, text: str) -> Event:
-        """Transmit one channel message, serialized and spaced from the last.
+    async def _send_chan_msg(
+        self, channel_idx: int, text: str, not_before: float | None = None
+    ) -> Event:
+        """Transmit one channel message, serialized, spaced, and confirmed.
 
         send_chan_msg's OK only means the firmware queued the message, not
-        that the radio finished transmitting it. Two sends fired back-to-back
-        collide on the air and one is silently dropped, so hold a lock and
-        wait out the rest of SEND_SPACING_SECONDS since the previous send
-        before starting the next.
+        that it reached the mesh. So hold a lock, wait out the rest of
+        SEND_SPACING_SECONDS since the previous send (and until the loop
+        time *not_before*, if given), then send and listen for a repeater
+        re-flooding the packet. If none is heard, send the identical packet
+        again: same timestamp, so a node that did get the first copy drops
+        the second as a duplicate.
         """
         with tracer().start_as_current_span(
             "send",
             attributes={"ottobot.channel_idx": channel_idx, "ottobot.text": text},
         ) as span:
             async with self._send_lock:
+                loop = asyncio.get_running_loop()
+                start_at = not_before or 0.0
                 if self._last_send_at is not None:
-                    elapsed = asyncio.get_running_loop().time() - self._last_send_at
-                    remaining = SEND_SPACING_SECONDS - elapsed
-                    if remaining > 0:
-                        # Traced too: the wait is why a burst of replies
-                        # trickles out rather than going all at once.
-                        span.set_attribute("ottobot.send_wait_seconds", remaining)
-                        await asyncio.sleep(remaining)
+                    start_at = max(start_at, self._last_send_at + SEND_SPACING_SECONDS)
+                remaining = start_at - loop.time()
+                if remaining > 0:
+                    # Traced too: the wait is why a reply takes a few seconds
+                    # and a burst of replies trickles out.
+                    span.set_attribute("ottobot.send_wait_seconds", remaining)
+                    await asyncio.sleep(remaining)
+                timestamp = int(time.time())
+                heard = asyncio.Event()
+                self._awaiting_repeat = (timestamp, text, heard)
                 try:
-                    result = await self.mc.commands.send_chan_msg(channel_idx, text)
+                    for attempt in range(1, SEND_ATTEMPTS + 1):
+                        span.set_attribute("ottobot.attempts", attempt)
+                        try:
+                            result = await self.mc.commands.send_chan_msg(
+                                channel_idx, text, timestamp
+                            )
+                        finally:
+                            self._last_send_at = loop.time()
+                        if result.type == EventType.ERROR:
+                            break
+                        sent_at = loop.time()
+                        try:
+                            await asyncio.wait_for(heard.wait(), REPEAT_TIMEOUT_SECONDS)
+                        except TimeoutError:
+                            if not self._hears_own_repeats:
+                                break
+                            logger.warning(
+                                "no repeat heard of %r (attempt %d)", text, attempt
+                            )
+                            continue
+                        span.set_attribute(
+                            "ottobot.repeat_wait_seconds", loop.time() - sent_at
+                        )
+                        break
                 finally:
-                    self._last_send_at = asyncio.get_running_loop().time()
+                    self._awaiting_repeat = None
+                span.set_attribute("ottobot.repeat_heard", heard.is_set())
             if result.type == EventType.ERROR:
                 span.set_status(StatusCode.ERROR)
             return result
+
+    def _note_repeat(self, payload: dict[str, Any]) -> None:
+        """Flag the waiting send as heard if *payload* is a repeat of it.
+
+        The library decrypts the channel packets the radio hears into the
+        sender's timestamp and "Name: text"; the bot's own packet coming
+        back is one with the timestamp it sent and its text.
+        """
+        if self._awaiting_repeat is None:
+            return
+        timestamp, text, heard = self._awaiting_repeat
+        message = payload.get("message")
+        if (
+            payload.get("sender_timestamp") == timestamp
+            and message is not None
+            and message.endswith(f": {text}")
+        ):
+            self._hears_own_repeats = True
+            heard.set()
 
     async def _broadcast(self, text: str, channel: ChannelConfig) -> None:
         """Send *text* on *channel*.
@@ -350,9 +433,14 @@ class MeshCoreRunner:
         it could decrypt with a msg_hash of its timestamp and text, which
         _packet_hash_for recomputes from the decoded message to pair the two
         up.
+
+        It is also how the bot learns a repeater re-flooded one of its own
+        sends (see _note_repeat).
         """
         log = event.payload
         payload_type = log.get("payload_type")
+        if payload_type == PAYLOAD_TYPE_GRP_TXT:
+            self._note_repeat(log)
         pkt_payload = log.get("pkt_payload")
         # The library reports a packet too short to parse as type -1.
         # TRACE packets aren't hashed: Beacon hashes them differently.
@@ -461,9 +549,16 @@ class MeshCoreRunner:
             text,
         )
 
+        # Replies hold off until the message's own flood has died down.
+        not_before = (
+            asyncio.get_running_loop().time()
+            + REPLY_DELAY_SECONDS
+            + random.uniform(0, REPLY_JITTER_SECONDS)
+        )
+
         async def reply(text: str) -> None:
             logger.info("%s reply: %r", label, text)
-            result = await self._send_chan_msg(channel_idx, text)
+            result = await self._send_chan_msg(channel_idx, text, not_before)
             if result.type == EventType.ERROR:
                 logger.error("failed to send channel reply: %r", result.payload)
 
