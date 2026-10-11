@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from datetime import timedelta
 from typing import Any
 
@@ -8,10 +9,13 @@ from meshcore.events import Event
 
 from ottobot import Context, Ottobot, TaskContext
 from ottobot import runner as runner_module
+from ottobot.beacon import packet_hash
 from ottobot.channels import PUBLIC, ChannelConfig
 from ottobot.config import BotConfig
 from ottobot.radio import RADIO
 from ottobot.runner import (
+    PACKET_HASH_CACHE_SIZE,
+    PAYLOAD_TYPE_GRP_TXT,
     PUBLIC_CHANNEL_KEY,
     MeshCoreRunner,
     apply_settings,
@@ -127,11 +131,13 @@ class FakeMeshCore:
         path_len: int | None = None,
         path: str | None = None,
         path_hash_mode: int | None = None,
+        **extra: Any,
     ) -> None:
         payload: dict[str, Any] = {
             "type": "CHAN",
             "channel_idx": channel_idx,
             "text": text,
+            **extra,
         }
         if path_len is not None:
             payload["path_len"] = path_len
@@ -141,6 +147,10 @@ class FakeMeshCore:
             payload["path_hash_mode"] = path_hash_mode
         event = FakeEvent(EventType.CHANNEL_MSG_RECV, payload)
         await self.callbacks[EventType.CHANNEL_MSG_RECV](event)
+
+    async def deliver_rx_log(self, **payload: Any) -> None:
+        event = FakeEvent(EventType.RX_LOG_DATA, payload)
+        await self.callbacks[EventType.RX_LOG_DATA](event)
 
 
 @pytest.fixture
@@ -158,6 +168,10 @@ def bot() -> Ottobot:
     @bot.command("path")
     async def path(ctx: Context) -> str:
         return ctx.path_description
+
+    @bot.command("packet")
+    async def packet(ctx: Context) -> str:
+        return ctx.message.packet_hash or "unknown"
 
     @bot.command("raw")
     async def raw(ctx: Context) -> str:
@@ -515,3 +529,69 @@ class TestScheduledTasks:
         seen_after_stop = calls
         await asyncio.sleep(0.05)
         assert calls == seen_after_stop
+
+
+def msg_hash(timestamp: int, text: str) -> int:
+    """The meshcore library's channel message hash (see Runner._packet_hash_for)."""
+    data = timestamp.to_bytes(4, "little") + text.encode("utf-8")
+    return int.from_bytes(hashlib.sha256(data).digest()[:4], "little")
+
+
+class TestPacketHash:
+    TEXT = "alice: ottobot !packet"
+    TIMESTAMP = 1791679638
+    PKT_PAYLOAD = bytes.fromhex("1f454e35da0c")
+
+    async def hear(self, mc: FakeMeshCore, **overrides: Any) -> None:
+        payload = {
+            "payload_type": PAYLOAD_TYPE_GRP_TXT,
+            "pkt_payload": self.PKT_PAYLOAD,
+            "msg_hash": msg_hash(self.TIMESTAMP, self.TEXT),
+        }
+        payload.update(overrides)
+        await mc.deliver_rx_log(**payload)
+
+    async def test_message_gets_hash_of_packet_it_arrived_in(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await self.hear(mc)
+        await mc.deliver_chan(
+            self.TEXT,
+            channel_idx=2,
+            sender_timestamp=self.TIMESTAMP,
+            txt_hash=msg_hash(self.TIMESTAMP, self.TEXT),
+        )
+        expected = packet_hash(PAYLOAD_TYPE_GRP_TXT, self.PKT_PAYLOAD)
+        assert mc.commands.sent_chan_msgs == [(2, expected)]
+
+    async def test_hash_matched_without_txt_hash(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        # Older frames don't carry txt_hash; it's recomputed from the text.
+        await self.hear(mc)
+        await mc.deliver_chan(self.TEXT, channel_idx=2, sender_timestamp=self.TIMESTAMP)
+        expected = packet_hash(PAYLOAD_TYPE_GRP_TXT, self.PKT_PAYLOAD)
+        assert mc.commands.sent_chan_msgs == [(2, expected)]
+
+    async def test_unheard_message_has_no_hash(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await self.hear(mc, msg_hash=12345)
+        await mc.deliver_chan(self.TEXT, channel_idx=2, sender_timestamp=self.TIMESTAMP)
+        assert mc.commands.sent_chan_msgs == [(2, "unknown")]
+
+    async def test_non_channel_packets_are_ignored(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await self.hear(mc, payload_type=4)
+        await mc.deliver_chan(self.TEXT, channel_idx=2, sender_timestamp=self.TIMESTAMP)
+        assert mc.commands.sent_chan_msgs == [(2, "unknown")]
+
+    async def test_only_recent_packets_are_remembered(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        await self.hear(mc)
+        for i in range(PACKET_HASH_CACHE_SIZE):
+            await self.hear(mc, msg_hash=i)
+        await mc.deliver_chan(self.TEXT, channel_idx=2, sender_timestamp=self.TIMESTAMP)
+        assert mc.commands.sent_chan_msgs == [(2, "unknown")]

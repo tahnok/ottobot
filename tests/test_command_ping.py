@@ -34,3 +34,28 @@ async def test_ping_without_sender_name(bot: Ottobot, reply: ReplyRecorder) -> N
     msg = IncomingMessage(text="@[ottobot] !ping", channel_idx=BOTS.index, path_len=255)
     await bot.dispatch(msg, reply)
     assert reply.replies == ["@[you] pong (direct)"]
+
+
+async def test_ping_links_to_beacon(bot: Ottobot, reply: ReplyRecorder) -> None:
+    msg = addressed("!ping", path_len=255, packet_hash="90d5b457307ec193")
+    await bot.dispatch(msg, reply)
+    assert reply.replies == [
+        "@[alice] pong (direct) " "https://m.tahnok.ca/90d5b457307ec193"
+    ]
+
+
+async def test_ping_drops_long_route_to_fit_link(
+    bot: Ottobot, reply: ReplyRecorder
+) -> None:
+    path = "".join(f"{i:04x}" for i in range(20))
+    msg = addressed(
+        "!ping",
+        path_len=20,
+        path=path,
+        path_hash_mode=1,
+        packet_hash="90d5b457307ec193",
+    )
+    await bot.dispatch(msg, reply)
+    assert reply.replies == [
+        "@[alice] pong (20 hops) " "https://m.tahnok.ca/90d5b457307ec193"
+    ]

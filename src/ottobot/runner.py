@@ -8,7 +8,9 @@ same channel.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -16,6 +18,7 @@ from meshcore import EventType, MeshCore
 from meshcore.events import Event, Subscription
 from opentelemetry.trace import StatusCode
 
+from .beacon import packet_hash
 from .bot import Ottobot
 from .channels import PUBLIC, ChannelConfig, channel_for_index
 from .config import BotConfig
@@ -50,6 +53,14 @@ PATH_HASH_MODE_2_BYTE = 1
 # two collide and one is silently lost (seen when a task announces several
 # alerts at once), so sends are serialized and held this far apart.
 SEND_SPACING_SECONDS = 2.0
+
+# MeshCore's GRP_TXT payload type: a channel message.
+PAYLOAD_TYPE_GRP_TXT = 5
+
+# How many recently heard channel packets to remember while waiting for the
+# decoded message to be fetched. That normally follows within a second, so
+# this only needs to cover a short burst of traffic.
+PACKET_HASH_CACHE_SIZE = 64
 
 
 class _Commands(Protocol):
@@ -185,6 +196,9 @@ class MeshCoreRunner:
         # out, so back-to-back sends are spaced (see SEND_SPACING_SECONDS).
         self._send_lock = asyncio.Lock()
         self._last_send_at: float | None = None
+        # Beacon packet hashes of recently heard channel packets, keyed by
+        # the library's message hash (see _on_rx_log / _packet_hash_for).
+        self._packet_hashes: OrderedDict[int, str] = OrderedDict()
 
     async def start(self) -> None:
         """Subscribe to message events and start fetching from the device."""
@@ -195,6 +209,7 @@ class MeshCoreRunner:
         # forwards raw packet logs.
         self.mc.set_decrypt_channel_logs(True)
         self._subscriptions = [
+            self.mc.subscribe(EventType.RX_LOG_DATA, self._on_rx_log),
             self.mc.subscribe(EventType.CHANNEL_MSG_RECV, self._on_channel_msg),
         ]
         # Without this, incoming messages stay queued on the device and
@@ -320,6 +335,43 @@ class MeshCoreRunner:
         finally:
             await self.stop()
 
+    async def _on_rx_log(self, event: Event) -> None:
+        """Remember the Beacon hash of each channel packet the radio hears.
+
+        The decoded CHANNEL_MSG_RECV that follows carries only the text, not
+        the packet it came in, so the hash is computed here from the raw
+        packet. The library tags a channel packet it could decrypt with a
+        msg_hash of its timestamp and text, which _packet_hash_for
+        recomputes from the decoded message to pair the two up.
+        """
+        payload = event.payload
+        msg_hash = payload.get("msg_hash")
+        pkt_payload = payload.get("pkt_payload")
+        if (
+            payload.get("payload_type") != PAYLOAD_TYPE_GRP_TXT
+            or msg_hash is None
+            or pkt_payload is None
+        ):
+            return
+        self._packet_hashes[msg_hash] = packet_hash(PAYLOAD_TYPE_GRP_TXT, pkt_payload)
+        self._packet_hashes.move_to_end(msg_hash)
+        while len(self._packet_hashes) > PACKET_HASH_CACHE_SIZE:
+            self._packet_hashes.popitem(last=False)
+
+    def _packet_hash_for(self, payload: dict[str, Any]) -> str | None:
+        """The Beacon hash of the packet a CHANNEL_MSG_RECV arrived in, if heard."""
+        msg_hash = payload.get("txt_hash")
+        if msg_hash is None:
+            # Only newer frames carry txt_hash; it's the same hash the
+            # library computes for the raw packet.
+            timestamp = payload.get("sender_timestamp")
+            if timestamp is None:
+                return None
+            text = payload.get("text", "").encode("utf-8")
+            digest = hashlib.sha256(timestamp.to_bytes(4, "little") + text).digest()
+            msg_hash = int.from_bytes(digest[:4], "little")
+        return self._packet_hashes.get(msg_hash)
+
     async def _on_channel_msg(self, event: Event) -> None:
         payload = event.payload
         channel_idx = payload.get("channel_idx", 0)
@@ -340,6 +392,7 @@ class MeshCoreRunner:
             path_len=payload.get("path_len"),
             path=payload.get("path"),
             path_hash_mode=payload.get("path_hash_mode"),
+            packet_hash=self._packet_hash_for(payload),
             raw=payload,
         )
 

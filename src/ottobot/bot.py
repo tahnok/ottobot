@@ -178,6 +178,7 @@ class Ottobot:
                 "ottobot.sender_name": message.sender_name or "",
                 "ottobot.text": message.text,
                 "ottobot.path": message.path_description,
+                "ottobot.packet_hash": message.packet_hash or "",
             },
         ) as span:
             outcome = await self._dispatch(message, reply, span)
