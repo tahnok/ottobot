@@ -347,6 +347,9 @@ class TestRunnerSpans:
         send = named(spans, "send")
         assert attributes(send)["ottobot.channel_idx"] == 3
         assert attributes(send)["ottobot.text"] == "hello mesh"
+        # Whether a repeater was heard re-flooding it, so lost sends show up.
+        assert attributes(send)["ottobot.repeat_heard"] is False
+        assert attributes(send)["ottobot.attempts"] == 1
         # The broadcast happens inside the task's trace.
         assert send.context is not None and task.context is not None
         assert send.context.trace_id == task.context.trace_id

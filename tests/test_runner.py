@@ -23,14 +23,6 @@ from ottobot.runner import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _no_send_spacing(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Real transmissions are spaced apart (SEND_SPACING_SECONDS); drop that
-    # to zero so the suite doesn't wait seconds between sends. The one test
-    # that exercises the spacing opts back in.
-    monkeypatch.setattr(runner_module, "SEND_SPACING_SECONDS", 0.0)
-
-
 class FakeEvent(Event):
     def __init__(self, type: EventType, payload: Any = None) -> None:
         super().__init__(type, payload)
@@ -39,6 +31,8 @@ class FakeEvent(Event):
 class FakeCommands:
     def __init__(self) -> None:
         self.sent_chan_msgs: list[tuple[int, str]] = []
+        # The sender timestamp each sent message was stamped with.
+        self.sent_timestamps: list[int | None] = []
         # Records device-setting calls for apply_settings tests.
         self.names: list[str] = []
         self.private_keys: list[bytes] = []
@@ -61,8 +55,11 @@ class FakeCommands:
             },
         )
 
-    async def send_chan_msg(self, channel_idx: int, text: str) -> FakeEvent:
+    async def send_chan_msg(
+        self, channel_idx: int, text: str, timestamp: int | None = None
+    ) -> FakeEvent:
         self.sent_chan_msgs.append((channel_idx, text))
+        self.sent_timestamps.append(timestamp)
         return FakeEvent(EventType.MSG_SENT, {"expected_ack": b"\x00"})
 
     async def set_name(self, name: str) -> FakeEvent:
@@ -595,3 +592,84 @@ class TestPacketHash:
             await self.hear(mc, msg_hash=i)
         await mc.deliver_chan(self.TEXT, channel_idx=2, sender_timestamp=self.TIMESTAMP)
         assert mc.commands.sent_chan_msgs == [(2, "unknown")]
+
+
+class TestReplyDelivery:
+    async def test_reply_waits_for_the_message_flood(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The message is still being re-flooded when the bot hears it; a
+        # reply sent straight away would collide with it.
+        monkeypatch.setattr(runner_module, "REPLY_DELAY_SECONDS", 0.2)
+        task = asyncio.create_task(mc.deliver_chan("alice: ottobot !ping", 2))
+        await asyncio.sleep(0.05)
+        assert mc.commands.sent_chan_msgs == []
+        await task
+        assert mc.commands.sent_chan_msgs == [(2, "pong")]
+
+    async def hear_own_repeat(self, mc: FakeMeshCore, text: str) -> None:
+        """Wait for the bot to send *text*, then deliver a repeater's copy."""
+        while (2, text) not in mc.commands.sent_chan_msgs:
+            await asyncio.sleep(0)
+        await mc.deliver_rx_log(
+            payload_type=PAYLOAD_TYPE_GRP_TXT,
+            sender_timestamp=mc.commands.sent_timestamps[-1],
+            message=f"ottobot: {text}",
+        )
+
+    async def test_send_heard_repeated_is_not_resent(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(runner_module, "REPEAT_TIMEOUT_SECONDS", 5.0)
+        runner._hears_own_repeats = True
+        await asyncio.gather(
+            mc.deliver_chan("alice: ottobot !ping", 2),
+            self.hear_own_repeat(mc, "pong"),
+        )
+        assert mc.commands.sent_chan_msgs == [(2, "pong")]
+
+    async def test_unrepeated_send_is_resent_identically(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        # Same timestamp, so it's the same packet: a node that did hear the
+        # first copy drops the second as a duplicate.
+        runner._hears_own_repeats = True
+        await mc.deliver_chan("alice: ottobot !ping", 2)
+        assert mc.commands.sent_chan_msgs == [(2, "pong")] * runner_module.SEND_ATTEMPTS
+        assert len(set(mc.commands.sent_timestamps)) == 1
+
+    async def test_not_resent_until_own_repeats_have_been_heard(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore
+    ) -> None:
+        # A device that never reports repeats would otherwise send
+        # everything twice.
+        await mc.deliver_chan("alice: ottobot !ping", 2)
+        assert mc.commands.sent_chan_msgs == [(2, "pong")]
+
+    async def test_hearing_a_repeat_enables_resending(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(runner_module, "REPEAT_TIMEOUT_SECONDS", 5.0)
+        await asyncio.gather(
+            mc.deliver_chan("alice: ottobot !ping", 2),
+            self.hear_own_repeat(mc, "pong"),
+        )
+        assert runner._hears_own_repeats
+
+    async def test_other_messages_are_not_mistaken_for_a_repeat(
+        self, runner: MeshCoreRunner, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(runner_module, "REPEAT_TIMEOUT_SECONDS", 0.1)
+        runner._hears_own_repeats = True
+
+        async def hear_other() -> None:
+            while not mc.commands.sent_chan_msgs:
+                await asyncio.sleep(0)
+            await mc.deliver_rx_log(
+                payload_type=PAYLOAD_TYPE_GRP_TXT,
+                sender_timestamp=mc.commands.sent_timestamps[-1],
+                message="bob: something else",
+            )
+
+        await asyncio.gather(mc.deliver_chan("alice: ottobot !ping", 2), hear_other())
+        assert mc.commands.sent_chan_msgs == [(2, "pong")] * runner_module.SEND_ATTEMPTS
