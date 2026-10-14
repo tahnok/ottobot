@@ -138,7 +138,10 @@ ones:
 What the send attributes mean:
 
 - `repeat_heard=true` means the bot's radio heard a repeater re-flood its own
-  packet. That's good evidence the packet made it onto the mesh.
+  packet. That only proves the first hop: the bot to `309947`. The repeater's
+  rebroadcast can still collide further out, so check Beacon. On 2026-10-14
+  at 06:06 ET a `!roll` reply had `repeat_heard=true` but no observer heard
+  it, because it went out at the same moment as an unrelated mesh-wide flood.
 - `attempts=2` means the first copy went unheard and the bot sent it again.
 
 **Check `service.instance.id` before blaming new code.** It changes on every
