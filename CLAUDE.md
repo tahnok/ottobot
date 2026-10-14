@@ -97,6 +97,13 @@ handlers can record spans unconditionally.
 - Returning `None` from a handler sends no reply; returning a `str` sends
   it; call `await ctx.reply(...)` directly for multiple replies.
 
+## Debugging on the mesh
+
+`DEBUGGING.md` covers investigating dropped or missing replies with
+Honeycomb (what the bot did) and the Beacon packet analyzer API at
+analyzer.meshmapper.net (what the rest of the mesh heard), joined by the
+packet hash.
+
 ## Testing notes
 
 Tests run against a fake in-memory bot/device — no hardware needed.
