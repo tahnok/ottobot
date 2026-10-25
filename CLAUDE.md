@@ -105,3 +105,11 @@ provides `channel_msg()`, `addressed()` (a channel message that mentions
 the bot and arrives on `#bots` so commands run), and `ReplyRecorder`.
 `pytest-asyncio` is in `auto` mode, so async tests need no extra
 decorators.
+
+Property-based tests use [hypothesis](https://hypothesis.readthedocs.io/)
+and live in `tests/test_properties.py` — prefer them for logic that takes
+free text off the mesh (parsing, addressing, reply formatting). Build the
+bot inside the test rather than via the `bot` fixture, since a
+function-scoped fixture is shared across every generated example. CI runs
+with `HYPOTHESIS_PROFILE=ci` (registered in `tests/conftest.py`), which
+disables the per-example deadline.
