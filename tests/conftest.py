@@ -1,8 +1,17 @@
+import os
+
 import pytest
+from hypothesis import settings
 
 from helpers import ReplyRecorder
 from ottobot import Ottobot
 from ottobot import runner as runner_module
+
+# Hypothesis profiles, picked with HYPOTHESIS_PROFILE (CI sets "ci"). Shared
+# CI runners are slow and noisy, so drop the per-example deadline there
+# rather than fail on timing, and print a reproduction blob on failure.
+settings.register_profile("ci", deadline=None, print_blob=True)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
 
 
 @pytest.fixture(autouse=True)
