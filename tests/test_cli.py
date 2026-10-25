@@ -69,3 +69,28 @@ async def test_run_applies_config_log_level_before_quieting(
     assert logging.getLogger().level == logging.DEBUG
     for name in HTTP_LOGGERS:
         assert logging.getLogger(name).level == logging.NOTSET
+
+
+async def test_run_reads_settings_from_env_file(
+    clean_http_logging: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Recorded so monkeypatch removes whatever load_dotenv sets.
+    for name in ("OTTOBOT_NAME", "OTTOBOT_LOG_LEVEL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OTTOBOT_LOG_LEVEL", "WARNING")
+    (tmp_path / ".env").write_text("OTTOBOT_NAME=fromenv\nOTTOBOT_LOG_LEVEL=DEBUG\n")
+    monkeypatch.chdir(tmp_path)
+    built: dict[str, object] = {}
+
+    def capture(**kwargs: object) -> None:
+        built.update(kwargs)
+        raise _StopRun
+
+    monkeypatch.setattr(cli, "build_bot", capture)
+
+    with pytest.raises(_StopRun):
+        await run(parse_args(["--simulate"]))
+
+    assert built["name"] == "fromenv"
+    # The real environment beats the .env file.
+    assert logging.getLogger().level == logging.WARNING

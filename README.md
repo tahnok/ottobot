@@ -72,6 +72,28 @@ device. The name precedence is `--name` > config `name` > the device's own
 advertised name. Because the file can hold the bot's private key, the real
 `ottobot.toml` is gitignored — keep it out of version control.
 
+### Environment variables
+
+Each per-bot setting can also be given as an environment variable, which
+wins over the config file — handy for keeping secrets out of the file, or
+renaming a bot for a local run without editing it:
+
+| Variable              | Config file equivalent  |
+| --------------------- | ----------------------- |
+| `OTTOBOT_NAME`        | `name`                  |
+| `OTTOBOT_PRIV_KEY`    | `private_key`           |
+| `OTTOBOT_LOG_LEVEL`   | `log_level`             |
+| `OTTOBOT_DISCORD_URL` | `[discord] webhook_url` |
+| `OTTOBOT_DB_PATH`     | `database`              |
+
+A variable that is unset or empty leaves the file's value alone. On startup
+the bot also loads a `.env` file from the working directory (gitignored, like
+`ottobot.toml`), so for local testing you can put the variables there instead
+of exporting them; anything already set in the real environment beats the
+`.env` file. `--name` still beats `OTTOBOT_NAME`. With Docker Compose, put
+them in a `.env` next to `docker-compose.yml` and pass them through with
+`env_file:` (see the commented example there).
+
 The config also has an optional `database` key for the sqlite file stateful
 sinks use (the welcome sink greets each channel name once and remembers who
 it has seen there). It defaults to `ottobot.db` in the working directory; in

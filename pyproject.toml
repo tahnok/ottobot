@@ -10,6 +10,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.30",
     "opentelemetry-instrumentation-httpx>=0.51b0",
     "opentelemetry-sdk>=1.30",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]

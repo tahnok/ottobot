@@ -2,6 +2,10 @@
 #
 #     ottobot --serial /dev/ttyUSB0 --config ottobot.toml
 #
+# Every per-bot setting can instead (or also) come from an OTTOBOT_*
+# environment variable or a .env file, which wins over this file — see
+# "Environment variables" in the README.
+#
 # Every field is optional. Anything you leave out is not touched on the
 # device, so the radio keeps whatever it already had. The real ottobot.toml
 # holds your private key, so keep it out of version control.

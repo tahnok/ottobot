@@ -13,6 +13,10 @@ hardcoded in code, not config — see ottobot.channels / ottobot.radio.) The
 config's [telemetry] table also turns on OpenTelemetry tracing to Honeycomb
 — see ottobot.telemetry.
 
+The per-bot settings can also be given as OTTOBOT_* environment variables,
+which win over the config file (see ottobot.config.ENV). A .env file in the
+working directory is loaded into the environment first, for local runs.
+
 To try commands locally without a device or touching the mesh:
 
     ottobot --simulate
@@ -25,9 +29,11 @@ import asyncio
 import logging
 from pathlib import Path
 
+from dotenv import find_dotenv, load_dotenv
+
 from .bot import Ottobot
 from .commands import load_commands
-from .config import BotConfig, load_config
+from .config import BotConfig, apply_env, load_config
 from .runner import MeshCoreRunner, apply_settings, connect
 from .sinks import load_sinks
 from .simulator import Simulator
@@ -89,7 +95,9 @@ def quiet_http_request_logs() -> None:
 
 
 async def run(args: argparse.Namespace) -> None:
-    config = load_config(args.config) if args.config else BotConfig()
+    # A variable already set in the real environment beats the .env file.
+    load_dotenv(find_dotenv(usecwd=True))
+    config = apply_env(load_config(args.config) if args.config else BotConfig())
     if config.log_level:
         logging.getLogger().setLevel(config.log_level)
     quiet_http_request_logs()

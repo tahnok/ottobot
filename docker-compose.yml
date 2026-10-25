@@ -78,6 +78,13 @@ services:
       - /tmp:size=32m,noexec,nosuid,nodev
       - /run:size=8m,noexec,nosuid,nodev
 
+    # Per-bot settings can also come from OTTOBOT_* environment variables
+    # (OTTOBOT_NAME, OTTOBOT_PRIV_KEY, OTTOBOT_DISCORD_URL, ...), which win
+    # over the config file. To keep secrets in a .env file next to this one
+    # instead, uncomment:
+    #
+    # env_file: .env
+
     environment:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONUNBUFFERED: "1"

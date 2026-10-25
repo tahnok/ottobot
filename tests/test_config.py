@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from ottobot.channels import CHANNELS
-from ottobot.config import BotConfig, load_config, parse_config
+from ottobot.config import BotConfig, apply_env, load_config, parse_config
 
 
 def parse(text: str) -> BotConfig:
@@ -83,3 +83,47 @@ def test_load_config_reads_file(tmp_path) -> None:
     path = tmp_path / "ottobot.toml"
     path.write_text('name = "fromfile"\n')
     assert load_config(path).name == "fromfile"
+
+
+def test_env_overrides_config_file() -> None:
+    config = parse("""
+        name = "fromfile"
+        log_level = "INFO"
+        database = "file.db"
+        [discord]
+        webhook_url = "https://discord.com/api/webhooks/1/file"
+        """)
+    config = apply_env(
+        config,
+        {
+            "OTTOBOT_NAME": "ottobot-dev",
+            "OTTOBOT_PRIV_KEY": "cd" * 64,
+            "OTTOBOT_LOG_LEVEL": "debug",
+            "OTTOBOT_DISCORD_URL": "https://discord.com/api/webhooks/2/env",
+            "OTTOBOT_DB_PATH": "/data/ottobot.db",
+        },
+    )
+    assert config.name == "ottobot-dev"
+    assert config.private_key == bytes.fromhex("cd" * 64)
+    assert config.log_level == "DEBUG"
+    assert config.discord_webhook_url == "https://discord.com/api/webhooks/2/env"
+    assert config.database == Path("/data/ottobot.db")
+
+
+def test_unset_or_empty_env_keeps_config_file_values() -> None:
+    config = parse('name = "fromfile"\nlog_level = "WARNING"')
+    assert apply_env(config, {"OTTOBOT_NAME": "", "UNRELATED": "x"}) == config
+
+
+def test_env_alone_needs_no_config_file() -> None:
+    assert apply_env(BotConfig(), {"OTTOBOT_NAME": "bot"}).name == "bot"
+
+
+def test_bad_env_private_key_names_the_variable() -> None:
+    with pytest.raises(ValueError, match="OTTOBOT_PRIV_KEY must be 64 bytes"):
+        apply_env(BotConfig(), {"OTTOBOT_PRIV_KEY": "abcd"})
+
+
+def test_bad_env_log_level_raises() -> None:
+    with pytest.raises(ValueError, match="log_level 'loud' is not a known level"):
+        apply_env(BotConfig(), {"OTTOBOT_LOG_LEVEL": "loud"})

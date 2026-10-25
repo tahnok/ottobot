@@ -19,18 +19,33 @@ it stays easy to unit-test. Example file:
 
     [telemetry]
     honeycomb_api_key = "hcaik_..."   # optional; enables tracing
+
+Each per-bot setting can also come from an environment variable (see ``ENV``),
+which wins over the file — so a Docker deployment can keep its secrets in a
+``.env`` file instead, and ``OTTOBOT_NAME`` can rename a bot for a local run
+without editing the config.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import tomllib
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from ottobot.channels import CHANNELS, ChannelConfig
 
 PRIVATE_KEY_LEN = 64
+
+# Environment variables that override the matching config file setting.
+NAME_ENV = "OTTOBOT_NAME"
+PRIVATE_KEY_ENV = "OTTOBOT_PRIV_KEY"
+LOG_LEVEL_ENV = "OTTOBOT_LOG_LEVEL"
+DISCORD_URL_ENV = "OTTOBOT_DISCORD_URL"
+DATABASE_ENV = "OTTOBOT_DB_PATH"
+ENV = (NAME_ENV, PRIVATE_KEY_ENV, LOG_LEVEL_ENV, DISCORD_URL_ENV, DATABASE_ENV)
 
 
 @dataclass(frozen=True)
@@ -134,3 +149,27 @@ def load_config(path: str | Path) -> BotConfig:
     with open(path, "rb") as f:
         data = tomllib.load(f)
     return parse_config(data)
+
+
+def apply_env(config: BotConfig, environ: Mapping[str, str] = os.environ) -> BotConfig:
+    """*config* with any settings given in the environment (see ``ENV``) applied.
+
+    An environment variable wins over the config file's value. One that is
+    unset or empty leaves the config's value alone, so a compose file can
+    list every variable without having to fill them all in.
+    """
+    env = {name: value for name in ENV if (value := environ.get(name, "").strip())}
+    changes: dict[str, object] = {}
+    if NAME_ENV in env:
+        changes["name"] = env[NAME_ENV]
+    if PRIVATE_KEY_ENV in env:
+        changes["private_key"] = _decode_hex(
+            env[PRIVATE_KEY_ENV], PRIVATE_KEY_ENV, PRIVATE_KEY_LEN
+        )
+    if LOG_LEVEL_ENV in env:
+        changes["log_level"] = _parse_log_level(env[LOG_LEVEL_ENV])
+    if DISCORD_URL_ENV in env:
+        changes["discord_webhook_url"] = env[DISCORD_URL_ENV]
+    if DATABASE_ENV in env:
+        changes["database"] = Path(env[DATABASE_ENV])
+    return replace(config, **changes)
