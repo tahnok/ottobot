@@ -21,6 +21,7 @@ dev = [
     "hypothesis>=6.170.9",
     "pytest>=9.1.1",
     "pytest-asyncio>=0.25",
+    "pytest-cov>=7.1.0",
     "ty>=0.0.56",
 ]
 
@@ -35,3 +36,17 @@ target-version = ["py313"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["tests"]
+# Any warning fails the run, so leaks like an unclosed sqlite connection (a
+# ResourceWarning) get fixed rather than scrolling past.
+filterwarnings = ["error"]
+
+# Coverage is opt-in (`uv run pytest --cov`, as CI does) so running a single
+# test file locally doesn't trip the floor below.
+[tool.coverage.run]
+source = ["ottobot"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
