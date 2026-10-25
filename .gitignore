@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .hypothesis/
+.coverage
 dist/
 *.egg-info/
 

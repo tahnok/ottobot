@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import logging
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -62,7 +63,9 @@ def _init_db(db_path: Path) -> None:
     """Create the seen-clients table if it doesn't exist yet."""
     if db_path.parent != Path(""):
         db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
+    # closing() because sqlite3's own context manager only commits; it
+    # leaves the connection open.
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS seen_clients ("
             "id TEXT PRIMARY KEY, "
@@ -83,7 +86,7 @@ def _record(db_path: Path, identifier: str, now: str) -> bool:
     (welcomes are dropped, not deferred).
     """
     global _last_welcome
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         cur = conn.execute(
             "UPDATE seen_clients SET last_seen = ? WHERE id = ?",
             (now, identifier),

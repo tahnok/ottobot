@@ -2,6 +2,7 @@
 at most one greeting per WELCOME_INTERVAL."""
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -61,7 +62,7 @@ async def test_second_newcomer_in_quick_succession_is_rate_limited(
     await bot.dispatch(chan("hi", "alice"), reply)
     await bot.dispatch(chan("hi", "bob"), reply)
     assert reply.replies == [WELCOME]
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         names = {row[0] for row in conn.execute("SELECT id FROM seen_clients")}
     assert names == {"alice", "bob"}  # recorded right away despite no greeting
 
@@ -94,7 +95,7 @@ async def test_faraway_newcomer_is_not_greeted_and_not_recorded(
     bot = await make_welcome_bot(db_path)
     await bot.dispatch(channel_msg("hi from afar", path_len=6), reply)
     assert reply.replies == []
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         assert conn.execute("SELECT COUNT(*) FROM seen_clients").fetchone() == (0,)
     await bot.dispatch(channel_msg("hi again, closer now", path_len=2), reply)
     assert reply.replies == [WELCOME]
@@ -130,7 +131,7 @@ async def test_non_public_channel_is_ignored(
 async def test_setup_creates_the_table(tmp_path: Path) -> None:
     db_path = tmp_path / "seen.db"
     await make_welcome_bot(db_path)
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         tables = [
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -146,7 +147,7 @@ def test_record_tracks_first_and_last_seen(tmp_path: Path) -> None:
     day2 = "2026-01-02T00:00:00+00:00"
     assert welcome_module._record(db_path, "alice", day1) is True
     assert welcome_module._record(db_path, "alice", day2) is False
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         first_seen, last_seen = conn.execute(
             "SELECT first_seen, last_seen FROM seen_clients WHERE id = ?",
             ("alice",),
@@ -166,7 +167,7 @@ def test_record_rate_limits_welcomes_to_one_per_interval(tmp_path: Path) -> None
     t0_plus_2h = "2026-01-01T02:00:00+00:00"
     assert welcome_module._record(db_path, "alice", t0) is True
     assert welcome_module._record(db_path, "bob", t0_plus_30m) is False
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         first_seen = conn.execute(
             "SELECT first_seen FROM seen_clients WHERE id = 'bob'"
         ).fetchone()[0]
