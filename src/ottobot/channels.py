@@ -41,7 +41,7 @@ CHANNELS: tuple[ChannelConfig, ...] = (
 )
 
 # Where the bot answers commands. It still *hears* every channel it has
-# joined (sinks see everything, e.g. the public-channel welcome), but
+# joined (sinks see everything), but
 # command replies are kept off the public and alert channels so the bot
 # doesn't add chatter there — conversations happen on #bots.
 COMMAND_CHANNELS: tuple[ChannelConfig, ...] = (BOTS, TESTING, OTTOBOT_TESTING)

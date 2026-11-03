@@ -1,7 +1,7 @@
 """Tests for message sinks: the @sink marker, dispatch, and loading.
 
-These cover the sink machinery only — the welcome sink's own behavior is
-tested separately.
+These cover the sink machinery only — each sink's own behavior is tested
+separately.
 """
 
 import types
