@@ -13,6 +13,7 @@ import logging
 import random
 import time
 from collections import OrderedDict
+from datetime import datetime, timezone
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -285,10 +286,29 @@ class MeshCoreRunner:
         await self.mc.stop_auto_message_fetching()
 
     async def _run_scheduled_task(self, scheduled: ScheduledTask) -> None:
-        """Run *scheduled* immediately, then again every scheduled.interval, forever."""
+        """Run *scheduled* on its schedule, forever.
+
+        An interval task runs immediately, then again every interval. An
+        ``at`` task waits for each of its clock times in turn.
+        """
+        if scheduled.interval is None:
+            await self._run_task_at_times(scheduled)
+            return
         while True:
             await self._run_task_once(scheduled)
             await asyncio.sleep(scheduled.interval.total_seconds())
+
+    async def _run_task_at_times(self, scheduled: ScheduledTask) -> None:
+        after = datetime.now(timezone.utc)
+        while True:
+            target = scheduled.next_run(after)
+            delay = (target - datetime.now(timezone.utc)).total_seconds()
+            await asyncio.sleep(max(delay, 0))
+            await self._run_task_once(scheduled)
+            # Measure the next slot from the one just run, not from "now":
+            # asyncio's clock can wake us a hair early, and "now" would then
+            # still be before target and pick the same slot twice.
+            after = max(target, datetime.now(timezone.utc))
 
     async def _run_task_once(self, scheduled: ScheduledTask) -> None:
         async def broadcast(text: str) -> None:

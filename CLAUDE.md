@@ -70,7 +70,10 @@ handlers can record spans unconditionally.
   message — there isn't one) and returning `str | None`. `channel` is one of
   the channel constants from `src/ottobot/channels.py` (`PUBLIC`, `OTT_ALERTS`,
   …), referenced directly rather than by name. The runner calls it
-  immediately on startup, then every `interval`; whatever it returns or
+  immediately on startup, then every `interval`. To run at fixed clock
+  times instead, pass `at=(time(9, tzinfo=ZoneInfo("America/Toronto")), ...)`
+  in place of `interval` — such a task runs daily at each time and never on
+  startup (see `src/ottobot/tasks/welcome.py`). Whatever it returns or
   sends via `ctx.reply(...)` is broadcast on that `channel` (output is
   dropped with an error if the bot hasn't joined it). Try it interactively
   with `uv run ottobot --simulate` and `/task <name>`. See

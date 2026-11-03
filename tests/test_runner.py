@@ -1,6 +1,6 @@
 import asyncio
 import hashlib
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -508,6 +508,31 @@ class TestScheduledTasks:
         await asyncio.sleep(0.3)  # past the gap
         assert mc.commands.sent_chan_msgs == [(0, "first"), (0, "second")]
         await runner.stop()
+
+    async def test_at_task_waits_for_its_time_instead_of_running_on_start(
+        self, mc: FakeMeshCore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        news = ChannelConfig(index=0, name="#news")
+        bot = task_bot(news)
+
+        @bot.task("greet", at=(time(9, tzinfo=timezone.utc),), channel=news)
+        async def greet(ctx: TaskContext) -> str:
+            return "hello mesh"
+
+        # Pretend the next slot is 0.1s away; after that, a day away.
+        slots = iter([0.1, 86400.0])
+
+        def next_run(self: object, after: datetime) -> datetime:
+            return datetime.now(timezone.utc) + timedelta(seconds=next(slots))
+
+        monkeypatch.setattr(runner_module.ScheduledTask, "next_run", next_run)
+        runner = MeshCoreRunner(bot, mc)
+        await runner.start()
+        await asyncio.sleep(0.05)
+        assert mc.commands.sent_chan_msgs == []  # nothing at startup
+        await asyncio.sleep(0.15)
+        await runner.stop()
+        assert mc.commands.sent_chan_msgs == [(0, "hello mesh")]
 
     async def test_stop_cancels_scheduled_tasks(
         self, bot: Ottobot, mc: FakeMeshCore
