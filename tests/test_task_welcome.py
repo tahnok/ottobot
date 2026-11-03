@@ -22,6 +22,9 @@ def test_task_posts_on_the_public_channel_at_fixed_times() -> None:
         datetime(2026, 11, 3, 13, tzinfo=OTTAWA)
     )
     assert scheduled.next_run(datetime(2026, 11, 3, 22, tzinfo=OTTAWA)) == (
+        datetime(2026, 11, 4, 0, tzinfo=OTTAWA)
+    )
+    assert scheduled.next_run(datetime(2026, 11, 4, 0, tzinfo=OTTAWA)) == (
         datetime(2026, 11, 4, 9, tzinfo=OTTAWA)
     )
 

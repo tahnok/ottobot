@@ -21,8 +21,9 @@ OTTAWA = ZoneInfo("America/Toronto")
 # on public).
 WELCOME = "New to the mesh? To chat with me join the #bots channel and say '@ottobot !help'. More (incl. Discord/Matrix) at https://ottawamesh.ca"
 
-# 9am, 1pm, 5pm and 9pm local: spread over the day, none overnight.
-WELCOME_TIMES = tuple(time(hour, tzinfo=OTTAWA) for hour in (9, 13, 17, 21))
+# Midnight, 9am, 1pm and 9pm local: the midnight one is for the many
+# late-night folks on the mesh.
+WELCOME_TIMES = tuple(time(hour, tzinfo=OTTAWA) for hour in (0, 9, 13, 21))
 
 
 @task(
