@@ -19,7 +19,7 @@ OTTAWA = ZoneInfo("America/Toronto")
 # under 140 chars plz — and mention only #bots, since that's the one
 # channel newcomers need to reach the bot (commands aren't answered here
 # on public).
-WELCOME = "New to the mesh? To chat with me join the #bots channel and say '@ottobot !help'. More (incl. Discord/Matrix) at https://ottawamesh.ca"
+WELCOME = "Welcome to the mesh! To chat with me join the #bots channel and say '@ottobot !help'. More (incl. Discord/Matrix) at https://ottawamesh.ca"
 
 # Midnight, 9am, 1pm and 9pm local: the midnight one is for the many
 # late-night folks on the mesh.
