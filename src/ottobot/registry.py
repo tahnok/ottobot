@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from types import ModuleType
 from typing import TYPE_CHECKING
 
@@ -51,16 +51,52 @@ class Command:
 class ScheduledTask:
     """A named handler that's run on a timer instead of in response to a message.
 
-    interval is how often the runner calls the handler. channel is the
+    A task is scheduled in exactly one of two ways. With interval, the
+    runner calls the handler right at startup and then every interval.
+    With at, a tuple of timezone-aware clock times (e.g.
+    ``time(9, tzinfo=ZoneInfo("America/Toronto"))``), it calls the handler
+    every day at each of those times, and never at startup. channel is the
     channel the task's output is broadcast on, referenced directly as one
     of the ``ottobot.channels`` constants (e.g. ``OTT_ALERTS``).
     """
 
     name: str
     handler: TaskHandler
-    interval: timedelta
+    interval: timedelta | None
     channel: "ChannelConfig"
     help: str = ""
+    at: tuple[time, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (self.interval is None) == (not self.at):
+            raise ValueError(
+                f"task {self.name!r} needs exactly one of interval= or at="
+            )
+        for t in self.at:
+            if t.tzinfo is None:
+                raise ValueError(
+                    f"task {self.name!r}: at= time {t} needs a tzinfo, "
+                    "so it doesn't depend on the host's timezone"
+                )
+
+    def next_run(self, after: datetime) -> datetime:
+        """The first of the ``at`` times strictly after the aware datetime *after*.
+
+        Each time is wall-clock time in its own timezone, so a 9:00 slot
+        stays at 9:00 local across daylight saving changes.
+        """
+        candidates = []
+        for t in self.at:
+            tz = t.tzinfo
+            local_day = after.astimezone(tz).date()
+            for days in (0, 1):
+                candidate = datetime.combine(
+                    local_day + timedelta(days=days), t.replace(tzinfo=None), tz
+                )
+                if candidate > after:
+                    candidates.append(candidate)
+                    break
+        return min(candidates)
 
 
 def command(
@@ -84,13 +120,23 @@ def command(
 
 
 def task(
-    name: str, *, interval: timedelta, channel: "ChannelConfig", help: str = ""
+    name: str,
+    *,
+    channel: "ChannelConfig",
+    interval: timedelta | None = None,
+    at: tuple[time, ...] = (),
+    help: str = "",
 ) -> Callable[[TaskHandler], TaskHandler]:
-    """Mark a module-level coroutine as a scheduled task handler."""
+    """Mark a module-level coroutine as a scheduled task handler.
+
+    Give exactly one of interval= or at= (see ScheduledTask).
+    """
 
     def decorator(handler: TaskHandler) -> TaskHandler:
         setattr(
-            handler, _TASK_ATTR, ScheduledTask(name, handler, interval, channel, help)
+            handler,
+            _TASK_ATTR,
+            ScheduledTask(name, handler, interval, channel, help, at),
         )
         return handler
 

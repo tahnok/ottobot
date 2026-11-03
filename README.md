@@ -47,8 +47,8 @@ commands meant to react to any channel message.
 The bot joins several channels but only answers commands on **#bots**,
 **#testing**, and **#ottobot-testing** — see `COMMAND_CHANNELS` in
 [`src/ottobot/channels.py`](src/ottobot/channels.py). Everywhere else it
-stays quiet: on the public channel it only greets newcomers once (pointing
-them at #bots), and #ott-alerts carries only scheduled alert broadcasts.
+stays quiet: on the public channel it only posts a welcome four times a day
+(pointing newcomers at #bots), and #ott-alerts carries only scheduled alert broadcasts.
 Sinks still see every message on every joined channel.
 
 ## Config file
@@ -73,8 +73,7 @@ advertised name. Because the file can hold the bot's private key, the real
 `ottobot.toml` is gitignored — keep it out of version control.
 
 The config also has an optional `database` key for the sqlite file stateful
-sinks use (the welcome sink greets each channel name once and remembers who
-it has seen there). It defaults to `ottobot.db` in the working directory; in
+handlers use. It defaults to `ottobot.db` in the working directory; in
 Docker, set it to `/data/ottobot.db` so it persists on the bind-mounted
 `./data` dir. An optional `[telemetry]` table turns on
 [tracing to Honeycomb](#tracing-with-honeycomb).

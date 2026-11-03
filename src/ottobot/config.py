@@ -56,7 +56,7 @@ class BotConfig:
     # A logging level name (e.g. "DEBUG", "INFO"); None leaves the default.
     log_level: str | None = None
 
-    # Path to the sqlite file stateful sinks (e.g. the welcome sink) use.
+    # Path to the sqlite file stateful handlers use.
     # None means cli falls back to its default.
     database: Path | None = None
 

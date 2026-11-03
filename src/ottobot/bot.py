@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import time, timedelta
 
 from opentelemetry.trace import Span, StatusCode
 
@@ -92,12 +92,21 @@ class Ottobot:
         return decorator
 
     def task(
-        self, name: str, *, interval: timedelta, channel: ChannelConfig, help: str = ""
+        self,
+        name: str,
+        *,
+        channel: ChannelConfig,
+        interval: timedelta | None = None,
+        at: tuple[time, ...] = (),
+        help: str = "",
     ) -> Callable[[TaskHandler], TaskHandler]:
-        """Decorator that registers a scheduled task handler."""
+        """Decorator that registers a scheduled task handler.
+
+        Give exactly one of interval= or at= (see ScheduledTask).
+        """
 
         def decorator(handler: TaskHandler) -> TaskHandler:
-            self.add_task(ScheduledTask(name, handler, interval, channel, help))
+            self.add_task(ScheduledTask(name, handler, interval, channel, help, at))
             return handler
 
         return decorator

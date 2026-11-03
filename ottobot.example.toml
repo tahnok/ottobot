@@ -14,7 +14,7 @@ name = "ottobot"
 # messages and per-command dispatch details.
 # log_level = "INFO"
 
-# Where stateful sinks (e.g. the welcome sink) keep their sqlite file. Omit
+# Where stateful handlers keep their sqlite file. Omit
 # to use the default "ottobot.db" in the working directory. In Docker, point
 # it at the bind-mounted /data dir so it survives container restarts.
 database = "/data/ottobot.db"
