@@ -2,8 +2,9 @@
 
 Every ``WELCOME_INTERVAL`` (four times a day) the bot posts a short
 welcome pointing at the #bots channel, where it answers commands (it stays
-quiet on public — see ``channels.COMMAND_CHANNELS``). Like every scheduled
-task it also posts once right after startup.
+quiet on public — see ``channels.COMMAND_CHANNELS``). The runner calls
+every task once right at startup; this one stays quiet on that first call,
+so restarting the bot doesn't add an extra welcome to the channel.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ WELCOME = "New to the mesh? To chat with me join the #bots channel and say '@ott
 # Four announcements a day.
 WELCOME_INTERVAL = timedelta(hours=6)
 
+# Whether the startup call (the one to skip) has happened yet.
+_started = False
+
 
 @task(
     "welcome",
@@ -28,5 +32,9 @@ WELCOME_INTERVAL = timedelta(hours=6)
     channel=PUBLIC,
     help="Post a welcome pointing newcomers at #bots",
 )
-async def welcome(ctx: TaskContext) -> str:
+async def welcome(ctx: TaskContext) -> str | None:
+    global _started
+    if not _started:
+        _started = True
+        return None
     return WELCOME

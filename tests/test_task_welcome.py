@@ -2,6 +2,8 @@
 
 from datetime import timedelta
 
+import pytest
+
 from ottobot.channels import PUBLIC
 from ottobot.config import BotConfig
 from ottobot.context import TaskContext
@@ -20,8 +22,17 @@ def test_task_posts_on_the_public_channel_four_times_a_day() -> None:
     assert scheduled.interval == timedelta(hours=6)
 
 
-async def test_task_returns_the_welcome() -> None:
+@pytest.fixture(autouse=True)
+def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(welcome_mod, "_started", False)
+
+
+async def test_startup_call_is_skipped_then_every_call_posts() -> None:
+    # The runner calls the task right at startup; that call stays quiet so a
+    # restart doesn't add an extra welcome. Every later call posts it.
     ctx = TaskContext(_reply=_no_reply, config=BotConfig())
+    assert await welcome_mod.welcome(ctx) is None
+    assert await welcome_mod.welcome(ctx) == WELCOME
     assert await welcome_mod.welcome(ctx) == WELCOME
 
 
