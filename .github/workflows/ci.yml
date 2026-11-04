@@ -59,7 +59,7 @@ jobs:
       # Only authenticate when we intend to push (i.e. `push` events).
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push'
-        uses: docker/login-action@v4.2.0
+        uses: docker/login-action@v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
