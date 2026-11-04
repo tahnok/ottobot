@@ -1,7 +1,7 @@
 """Tests for the OpenTelemetry wiring and the spans handlers produce."""
 
 import threading
-from collections.abc import Generator, Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -74,7 +74,7 @@ class Received(NamedTuple):
 
 
 @contextmanager
-def recording_server() -> Iterator[tuple[str, list[Received]]]:
+def recording_server() -> Generator[tuple[str, list[Received]]]:
     """A loopback HTTP server that answers 200 and records what it got."""
     received: list[Received] = []
 
