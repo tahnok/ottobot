@@ -62,6 +62,29 @@ def assert_conforms(protocol: type, real: Any, name: str) -> None:
             pytest.fail(f"{name}{real_sig} no longer accepts {count} args: {e}")
 
 
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("create_serial", ("/dev/ttyUSB0", 115200)),
+        ("create_ble", ("AA:BB:CC:DD:EE:FF",)),
+        ("create_tcp", ("10.0.0.1", 5000)),
+    ],
+)
+def test_connect_calls_still_bind(name: str, args: tuple[Any, ...]) -> None:
+    # connect() is tested against stand-ins for these, as the runner is
+    # against the fake, so check the calls it makes against the real ones.
+    factory = getattr(MeshCore, name)
+    assert inspect.iscoroutinefunction(factory)
+    inspect.signature(factory).bind(*args)
+
+
+def test_cli_can_disconnect(mc: MeshCore) -> None:
+    # cli.py holds the real MeshCore rather than a MeshCoreLike, so this one
+    # method isn't in the protocols above.
+    assert inspect.iscoroutinefunction(mc.disconnect)
+    inspect.signature(mc.disconnect).bind()
+
+
 @pytest.mark.parametrize("name", protocol_members(MeshCoreLike))
 def test_meshcore_matches_protocol(mc: MeshCore, name: str) -> None:
     assert_conforms(MeshCoreLike, mc, name)
