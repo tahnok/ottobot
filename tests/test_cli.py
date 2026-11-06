@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import respx
 from meshcore import EventType
 
 from helpers import FakeMeshCore
@@ -17,7 +18,7 @@ from ottobot.channels import BOTS
 from ottobot.cli import parse_args, quiet_http_request_logs, run
 from ottobot.radio import RADIO
 from ottobot.tasks import weather_alerts as alerts_mod
-from test_task_weather_alerts import AQW, fake_httpx_client
+from test_task_weather_alerts import AQW, serve
 
 HTTP_LOGGERS = ("httpx", "httpcore")
 
@@ -142,9 +143,12 @@ class TestSimulate:
         assert "pong" not in out
 
     def test_runs_a_real_task(
-        self, run_main: Callable[..., str], monkeypatch: pytest.MonkeyPatch
+        self,
+        run_main: Callable[..., str],
+        monkeypatch: pytest.MonkeyPatch,
+        api: respx.MockRouter,
     ) -> None:
-        fake_httpx_client(monkeypatch, payload=AQW)
+        serve(api, payload=AQW)
         monkeypatch.setattr(alerts_mod, "_seen", set())
         monkeypatch.setattr(alerts_mod, "_primed", True)
 
