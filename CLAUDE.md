@@ -29,7 +29,7 @@ central registry to edit.
 uv sync               # install deps (including dev group)
 uv run black .        # auto-format the code (black)
 uv run pytest         # run the test suite
-uv run pytest --cov   # ...with branch coverage (CI fails under 90%)
+uv run pytest --cov   # ...with branch coverage (CI fails under 95%)
 uv run ty check       # type check (ty, not mypy)
 ```
 

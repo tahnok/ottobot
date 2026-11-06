@@ -110,6 +110,31 @@ class TestControls:
         await sim.handle_line("/quit")
         assert sim.done
 
+    async def test_channel_rejects_non_number(self, sim: Simulator) -> None:
+        assert await sim.handle_line("/channel abc") == [
+            "channel must be a number, got 'abc'"
+        ]
+        assert sim.channel_idx == BOTS.index
+
+    async def test_name_requires_an_argument(self, sim: Simulator) -> None:
+        assert await sim.handle_line("/name") == ["usage: /name <name>"]
+        assert sim.sender_name == "you"
+
+    async def test_help_lists_controls(self, sim: Simulator) -> None:
+        lines = await sim.handle_line("/help")
+        for control in ("/channel", "/name", "/hops", "/task", "/status", "/quit"):
+            assert any(line.startswith(control) for line in lines)
+
+    async def test_hops_rejects_non_number(self, sim: Simulator) -> None:
+        (notice,) = await sim.handle_line("/hops many")
+        assert "usage" in notice
+        assert sim.path_len == 255
+
+    async def test_hops_rejects_negative(self, sim: Simulator) -> None:
+        (notice,) = await sim.handle_line("/hops -1")
+        assert "negative" in notice
+        assert sim.path_len == 255
+
     async def test_unknown_control_suggests_help(self, sim: Simulator) -> None:
         (notice,) = await sim.handle_line("/bogus")
         assert "/help" in notice
@@ -170,6 +195,54 @@ class TestTaskControl:
         (notice,) = await sim.handle_line("/task")
         assert "usage" in notice
         assert "greet" in notice
+
+
+class TestRepl:
+    @pytest.fixture
+    def typed(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        """Lines input() will return, in order, before reporting EOF."""
+        lines: list[str] = []
+        lines_iter = iter(lines)
+
+        def fake_input(prompt: str = "") -> str:
+            try:
+                return next(lines_iter)
+            except StopIteration:
+                raise EOFError from None
+
+        monkeypatch.setattr("builtins.input", fake_input)
+        return lines
+
+    async def test_prints_banner_and_replies_until_eof(
+        self, sim: Simulator, typed: list[str], capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        typed.extend(["@[ottobot] !ping", ""])
+        await sim.repl()
+        out = capsys.readouterr().out
+        assert "@[ottobot] !help" in out
+        assert "bot> pong (direct)" in out
+
+    async def test_quit_stops_reading(
+        self, sim: Simulator, typed: list[str], capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        typed.extend(["/quit", "@[ottobot] !ping"])
+        await sim.repl()
+        out = capsys.readouterr().out
+        assert "bye" in out
+        assert "pong" not in out
+
+    async def test_ctrl_c_leaves_cleanly(
+        self,
+        sim: Simulator,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def interrupted(prompt: str = "") -> str:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("builtins.input", interrupted)
+        await sim.repl()
+        assert capsys.readouterr().out.endswith("\n\n")
 
 
 def test_cli_accepts_simulate_flag() -> None:

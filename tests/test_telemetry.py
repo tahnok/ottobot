@@ -16,7 +16,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.trace import StatusCode
 
-from helpers import ReplyRecorder, addressed, channel_msg
+from helpers import FakeMeshCore, ReplyRecorder, addressed, channel_msg
 from ottobot import Context, Ottobot, TaskContext
 from ottobot.channels import PUBLIC, ChannelConfig
 from ottobot.config import BotConfig, TelemetryConfig, parse_config
@@ -38,9 +38,6 @@ from ottobot.telemetry import (
     start_telemetry,
     traces_endpoint,
 )
-
-# The fake device from the runner tests, reused here to trace real sends.
-from test_runner import FakeMeshCore
 
 # The tracer provider can only be installed once per process, so it is
 # built lazily and shared; each test clears the exporter first.
