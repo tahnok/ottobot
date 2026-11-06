@@ -1,6 +1,8 @@
 import os
+from collections.abc import Generator
 
 import pytest
+import respx
 from hypothesis import settings
 
 from helpers import ReplyRecorder
@@ -23,6 +25,16 @@ def _no_send_waits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner_module, "REPLY_DELAY_SECONDS", 0.0)
     monkeypatch.setattr(runner_module, "REPLY_JITTER_SECONDS", 0.0)
     monkeypatch.setattr(runner_module, "REPEAT_TIMEOUT_SECONDS", 0.0)
+
+
+@pytest.fixture
+def api() -> Generator[respx.MockRouter]:
+    """Mock HTTP at the transport layer, so the real httpx client code runs.
+
+    A request to any URL without a route fails the test.
+    """
+    with respx.mock(assert_all_called=False) as router:
+        yield router
 
 
 @pytest.fixture
