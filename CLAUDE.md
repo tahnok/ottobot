@@ -126,7 +126,7 @@ responses, timeouts and malformed JSON as well as the happy path (see
 
 `tests/test_live_apis.py` checks the real upstream APIs still have the shape
 the tasks parse. It's marked `live` and deselected by default; run it with
-`uv run pytest -m live`. `.github/workflows/live-apis.yml` runs it daily and
+`uv run pytest -m live`. `.github/workflows/live-apis.yml` runs it weekly and
 opens or updates an issue on failure, separately from CI so a flaky upstream
 never blocks a merge.
 

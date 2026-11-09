@@ -3,7 +3,7 @@
 Everything else runs against fixtures, which keep passing if Environment
 Canada or KUBRA changes a URL or response shape; the only sign of that would
 be the bot going quiet on #ott-alerts. These hit the real endpoints, so they
-only run on request (`uv run pytest -m live`), daily via
+only run on request (`uv run pytest -m live`), weekly via
 .github/workflows/live-apis.yml. They check shape only: the values change by
 the minute, and most of the time there's little happening in them.
 """

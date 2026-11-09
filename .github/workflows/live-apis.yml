@@ -5,7 +5,8 @@ name: Live API check
 # never blocks a merge; a failure opens (or comments on) a tracking issue.
 on:
   schedule:
-    - cron: "17 11 * * *"
+    # Weekly, Monday morning.
+    - cron: "17 11 * * 1"
   workflow_dispatch:
 
 permissions:
