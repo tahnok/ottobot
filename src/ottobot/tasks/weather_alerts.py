@@ -185,11 +185,10 @@ async def fetch_alerts() -> list[Alert]:
 )
 async def weather_alerts(ctx: TaskContext) -> None:
     global _primed
-    try:
-        alerts = await fetch_alerts()
-    except Exception:
-        logger.warning("failed to fetch Environment Canada alerts", exc_info=True)
-        return
+    # A failed fetch just raises: the runner (and simulator) log a raising
+    # task, mark its span as an error, and keep the schedule going. Nothing
+    # below has run, so the next poll picks up where this one left off.
+    alerts = await fetch_alerts()
 
     logger.info(f"alerts from feed {alerts}")
 

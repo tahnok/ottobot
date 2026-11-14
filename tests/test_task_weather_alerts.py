@@ -490,10 +490,14 @@ class TestWeatherAlertsTask:
         await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
 
-    async def test_fetch_failure_does_not_raise(self, api: respx.MockRouter) -> None:
+    async def test_fetch_failure_propagates_without_priming(
+        self, api: respx.MockRouter
+    ) -> None:
+        # No local catch-all: the runner logs a raising task and carries on.
         serve(api, error=httpx.ConnectError("network is down"))
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        with pytest.raises(httpx.ConnectError):
+            await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
         assert alerts_mod._primed is False
 
@@ -571,24 +575,22 @@ class TestWeatherAlertsTask:
 
 
 class TestFailedFetch:
-    """A failed fetch is logged and skipped: no raise, nothing said or primed."""
+    """Failures propagate for the runner to log, with nothing said or changed."""
 
     @staticmethod
-    async def assert_skipped(caplog: pytest.LogCaptureFixture) -> None:
+    async def assert_fails(expected: type[Exception]) -> None:
         replies: list[str] = []
-        assert await alerts_mod.weather_alerts(make_ctx(replies)) is None
+        with pytest.raises(expected):
+            await alerts_mod.weather_alerts(make_ctx(replies))
         assert replies == []
         assert alerts_mod._primed is False
-        assert "failed to fetch Environment Canada alerts" in caplog.text
 
     # 301: httpx doesn't follow redirects unless told to, so a moved endpoint
     # fails here rather than being chased.
     @pytest.mark.parametrize("status", [301, 404, 429, 500, 503])
-    async def test_error_status(
-        self, api: respx.MockRouter, caplog: pytest.LogCaptureFixture, status: int
-    ) -> None:
+    async def test_error_status(self, api: respx.MockRouter, status: int) -> None:
         serve(api, response=httpx.Response(status, json=AQW))
-        await self.assert_skipped(caplog)
+        await self.assert_fails(httpx.HTTPStatusError)
 
     @pytest.mark.parametrize(
         "error",
@@ -599,37 +601,52 @@ class TestFailedFetch:
         ],
     )
     async def test_transport_error(
-        self,
-        api: respx.MockRouter,
-        caplog: pytest.LogCaptureFixture,
-        error: Exception,
+        self, api: respx.MockRouter, error: Exception
     ) -> None:
         serve(api, error=error)
-        await self.assert_skipped(caplog)
+        await self.assert_fails(type(error))
 
     @pytest.mark.parametrize(
         "body", [b"<html>Service Unavailable</html>", b"", b'{"features": [']
     )
-    async def test_malformed_json(
-        self, api: respx.MockRouter, caplog: pytest.LogCaptureFixture, body: bytes
-    ) -> None:
+    async def test_malformed_json(self, api: respx.MockRouter, body: bytes) -> None:
         serve(api, response=httpx.Response(200, content=body))
-        await self.assert_skipped(caplog)
+        await self.assert_fails(json.JSONDecodeError)
 
-    async def test_json_that_is_not_a_collection(
-        self, api: respx.MockRouter, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_json_that_is_not_a_collection(self, api: respx.MockRouter) -> None:
+        # A shape change fails the poll loudly instead of reading as "fetch
+        # failed" (or as no alerts).
         serve(api, response=httpx.Response(200, json=["not", "a", "collection"]))
-        await self.assert_skipped(caplog)
+        await self.assert_fails(AttributeError)
 
     async def test_next_poll_recovers(self, api: respx.MockRouter) -> None:
         serve(api, response=httpx.Response(503))
-        await alerts_mod.weather_alerts(make_ctx([]))
+        with pytest.raises(httpx.HTTPStatusError):
+            await alerts_mod.weather_alerts(make_ctx([]))
         assert alerts_mod._primed is False
 
         serve(api, payload=AQW)
         await alerts_mod.weather_alerts(make_ctx([]))
         assert alerts_mod._seen == {"Air Quality Warning"}
+
+    async def test_failure_mid_alert_keeps_what_was_seen(
+        self, api: respx.MockRouter
+    ) -> None:
+        # An outage while an alert is live must neither sound the all-clear
+        # nor make the alert read as new once the API is back.
+        serve(api, payload=AQW)
+        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+
+        serve(api, response=httpx.Response(503))
+        replies: list[str] = []
+        with pytest.raises(httpx.HTTPStatusError):
+            await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == []
+        assert alerts_mod._seen == {"Air Quality Warning"}
+
+        serve(api, payload=AQW)
+        await alerts_mod.weather_alerts(make_ctx(replies))
+        assert replies == []
 
 
 async def test_request_carries_a_timeout(api: respx.MockRouter) -> None:
