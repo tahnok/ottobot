@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # --- Runtime stage ---------------------------------------------------------
 # A bare Python image — no uv, no build tools — with just the venv copied in.
-FROM python:3.14-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 # tzdata provides the zoneinfo database (/usr/share/zoneinfo) that the C
 # library reads when a TZ like `America/Toronto` is set, so log timestamps
