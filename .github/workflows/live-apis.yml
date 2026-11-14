@@ -1,0 +1,52 @@
+name: Live API check
+
+# Fetches the real upstream APIs the scheduled tasks depend on and checks they
+# still have the shape the tasks parse. Separate from CI so a flaky upstream
+# never blocks a merge; a failure opens (or comments on) a tracking issue.
+on:
+  schedule:
+    # Weekly, Monday morning.
+    - cron: "17 11 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync
+
+      # One retry a few minutes later, so an upstream blip doesn't open an issue.
+      - name: Check the upstream APIs
+        id: live
+        run: uv run pytest -m live || { sleep 300; uv run pytest -m live; }
+
+      - name: Open or update the tracking issue
+        if: failure() && steps.live.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Live API check failing"
+          body="An upstream API may have changed, which would leave the bot quiet on #ott-alerts: $RUN_URL"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
