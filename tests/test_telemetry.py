@@ -476,13 +476,21 @@ class TestExport:
         assert b"smoke" in received[0].body
         assert b"ottobot" in received[0].body
 
-    def test_the_export_deadline_is_short(self) -> None:
+    def test_the_export_deadline_is_short(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # shutdown_telemetry()'s flush is only as bounded as the exporter's
         # own deadline — the SDK takes no timeout for shutdown and ignores
         # the one force_flush is given — so a collector that has gone away
         # must not hold the bot's exit open for the OTLP default of 10s.
-        exporter = build_exporter(TelemetryConfig(), "key")
-        assert exporter._timeout == EXPORT_TIMEOUT_SECONDS
+        # Check the argument we pass rather than where the exporter keeps
+        # it, which is private and moves between releases.
+        kwargs: dict[str, Any] = {}
+        monkeypatch.setattr(
+            telemetry_module, "OTLPSpanExporter", lambda **kw: kwargs.update(kw)
+        )
+        build_exporter(TelemetryConfig(), "key")
+        assert kwargs["timeout"] == EXPORT_TIMEOUT_SECONDS
         assert EXPORT_TIMEOUT_SECONDS <= 5
 
 
