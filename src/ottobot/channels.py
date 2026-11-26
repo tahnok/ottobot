@@ -38,6 +38,7 @@ CHANNELS: tuple[ChannelConfig, ...] = (
     OTTOBOT_TESTING,
     OTT_ALERTS,
     BOTS,
+    GAMES,
 )
 
 # Where the bot answers commands. It still *hears* every channel it has
