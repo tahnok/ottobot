@@ -1,12 +1,21 @@
 # syntax=docker/dockerfile:1
 
 # --- Build stage -----------------------------------------------------------
-# Pin to a uv image that ships the project's Python (3.14). uv builds the
-# project into a self-contained virtualenv at /app/.venv.
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
+# The build and runtime stages MUST use the same Python image: the venv's
+# site-packages lives under lib/pythonX.Y/, so a venv built on 3.14 can't be
+# imported by 3.15 (ModuleNotFoundError: No module named 'ottobot'). Using the
+# identical `python:` tag in both FROM lines lets Dependabot bump them together
+# in one PR. uv itself is copied in from its own (separately versioned) image.
+FROM python:3.14-slim-bookworm AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
+
+# Build against the image's own interpreter (never a uv-downloaded one), so
+# the venv matches the runtime stage's Python exactly.
 ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON=/usr/local/bin/python3
 
 WORKDIR /app
 
@@ -28,6 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # --- Runtime stage ---------------------------------------------------------
 # A bare Python image — no uv, no build tools — with just the venv copied in.
+# Keep this tag identical to the build stage's (see note there).
 FROM python:3.14-slim-bookworm
 
 # tzdata provides the zoneinfo database (/usr/share/zoneinfo) that the C
