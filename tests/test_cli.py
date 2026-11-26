@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import respx
 from meshcore import EventType
@@ -18,7 +19,7 @@ from ottobot.channels import BOTS
 from ottobot.cli import parse_args, quiet_http_request_logs, run
 from ottobot.radio import RADIO
 from ottobot.tasks import weather_alerts as alerts_mod
-from test_task_weather_alerts import AQW, serve
+from test_task_weather_alerts import AQW, EMPTY, serve
 
 HTTP_LOGGERS = ("httpx", "httpcore")
 
@@ -143,16 +144,17 @@ class TestSimulate:
         assert "pong" not in out
 
     def test_runs_a_real_task(
-        self,
-        run_main: Callable[..., str],
-        monkeypatch: pytest.MonkeyPatch,
-        api: respx.MockRouter,
+        self, run_main: Callable[..., str], api: respx.MockRouter
     ) -> None:
-        serve(api, payload=AQW)
-        monkeypatch.setattr(alerts_mod, "_seen", set())
-        monkeypatch.setattr(alerts_mod, "_primed", True)
+        # The first run primes on an empty feed; the alert that appears by
+        # the second is announced, so the task's state carried over.
+        api.get(alerts_mod.ALERTS_URL).mock(
+            side_effect=[httpx.Response(200, json=EMPTY), httpx.Response(200, json=AQW)]
+        )
 
-        out = run_main("/task", "/task weather_alerts", "/task nosuchtask")
+        out = run_main(
+            "/task", "/task weather_alerts", "/task weather_alerts", "/task nosuchtask"
+        )
 
         assert "available: " in out
         assert "weather_alerts" in out

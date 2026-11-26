@@ -25,6 +25,7 @@ reads as empty and the bot announces an all-clear once (guarded by
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, NamedTuple
 
@@ -71,12 +72,19 @@ MAX_MESSAGE_LEN = 140
 # carries no entry to announce, so the message is synthesized here.
 ALL_CLEAR = "No alerts in effect"
 
-# Announcements already made or seen on the priming run, held as the text
-# announced rather than the bulletin id: an alert re-issued per region
-# arrives as several bulletins carrying one message, and the channel should
-# see that message once.
-_seen: set[str] = set()
-_primed = False
+
+@dataclass
+class AlertsState:
+    """What the task remembers between polls (the bot keeps one per run)."""
+
+    # Announcements already made or seen on the priming run, held as the
+    # text announced rather than the bulletin id: an alert re-issued per
+    # region arrives as several bulletins carrying one message, and the
+    # channel should see that message once.
+    seen: set[str] = field(default_factory=set)
+    # False until the first poll, which records what's already in effect
+    # without announcing it.
+    primed: bool = False
 
 
 class Alert(NamedTuple):
@@ -182,9 +190,10 @@ async def fetch_alerts() -> list[Alert]:
     interval=timedelta(minutes=10),
     channel=OTT_ALERTS,
     help="Announce new Environment Canada weather alerts for Ottawa",
+    state=AlertsState,
 )
-async def weather_alerts(ctx: TaskContext) -> None:
-    global _primed
+async def weather_alerts(ctx: TaskContext[AlertsState]) -> None:
+    state = ctx.state
     # A failed fetch just raises: the runner (and simulator) log a raising
     # task, mark its span as an error, and keep the schedule going. Nothing
     # below has run, so the next poll picks up where this one left off.
@@ -192,22 +201,22 @@ async def weather_alerts(ctx: TaskContext) -> None:
 
     logger.info(f"alerts from feed {alerts}")
 
-    if not _primed:
-        _seen.update(alert.title for alert in alerts)
-        _primed = True
+    if not state.primed:
+        state.seen.update(alert.title for alert in alerts)
+        state.primed = True
         return
 
-    new_alerts = [alert for alert in alerts if alert.title not in _seen]
+    new_alerts = [alert for alert in alerts if alert.title not in state.seen]
     # Several alerts can appear in one fetch; announce each on its own
     # line/packet, oldest-first (parse_alerts already orders them).
     await ctx.reply_many(alert.title for alert in new_alerts)
     # The collection just went empty after having alerts: sound the
-    # all-clear once. The _seen guard (cleared below) keeps it from
+    # all-clear once. The seen guard (cleared below) keeps it from
     # repeating on subsequent empty fetches.
-    if not alerts and _seen:
+    if not alerts and state.seen:
         await ctx.reply(ALL_CLEAR)
-    # Track only the live collection so _seen doesn't grow forever on a
+    # Track only the live collection so seen doesn't grow forever on a
     # long-running bot. An ended alert's text doesn't come back; a re-issued
     # alert saying something new is announced again.
-    _seen.clear()
-    _seen.update(alert.title for alert in alerts)
+    state.seen.clear()
+    state.seen.update(alert.title for alert in alerts)

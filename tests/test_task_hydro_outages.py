@@ -12,6 +12,7 @@ from ottobot.config import BotConfig
 from ottobot.context import TaskContext
 from ottobot.registry import module_tasks
 from ottobot.tasks import hydro_outages as outages_mod
+from ottobot.tasks.hydro_outages import OutageState
 
 
 def current_state(updated_at: int = 1000, interval: str = "data/guid-1") -> dict:
@@ -61,11 +62,10 @@ def ward_report(*areas: tuple[str, int, int]) -> dict:
     }
 
 
-@pytest.fixture(autouse=True)
-def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(outages_mod, "_last_updated_at", None)
-    monkeypatch.setattr(outages_mod, "_state_last_modified", None)
-    monkeypatch.setattr(outages_mod, "_announced_customers", None)
+@pytest.fixture
+def state() -> OutageState:
+    """A fresh task state per test, as a newly started bot would build."""
+    return OutageState()
 
 
 # Sentinel response value: reply with a bodyless 304 Not Modified.
@@ -117,11 +117,11 @@ def snapshot_responses(
     }
 
 
-def make_ctx() -> TaskContext:
+def make_ctx(state: OutageState) -> TaskContext[OutageState]:
     async def reply(text: str) -> None:
         raise AssertionError("task should return its announcement, not reply()")
 
-    return TaskContext(_reply=reply, config=BotConfig())
+    return TaskContext(_reply=reply, config=BotConfig(), state=state)
 
 
 def test_task_announces_on_the_ott_alerts_channel() -> None:
@@ -202,9 +202,11 @@ class TestFormatAnnouncement:
 
 
 class TestHydroOutagesTask:
-    async def test_small_outage_is_not_announced(self, api: respx.MockRouter) -> None:
+    async def test_small_outage_is_not_announced(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
         serve(api, snapshot_responses(customers=200, outages=4))
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
         # The ward report is only fetched when something will be announced.
         assert requested(api) == [
             outages_mod.CURRENT_STATE_URL,
@@ -212,7 +214,7 @@ class TestHydroOutagesTask:
         ]
 
     async def test_significant_outage_is_announced_with_wards(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
@@ -222,31 +224,31 @@ class TestHydroOutagesTask:
                 areas=(("Somerset", 1, 600), ("Stittsville", 1, 200)),
             ),
         )
-        result = await outages_mod.hydro_outages(make_ctx())
+        result = await outages_mod.hydro_outages(make_ctx(state))
         assert result == (
             "Hydro Ottawa: 800 customers out (2 outages): "
             "Somerset 600, Stittsville 200"
         )
-        assert outages_mod._announced_customers == 800
+        assert state.announced_customers == 800
 
     async def test_unchanged_snapshot_fetches_nothing_downstream(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(api, snapshot_responses(customers=200))
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
 
         serve(api, {outages_mod.CURRENT_STATE_URL: current_state()})
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
         assert requested(api) == [outages_mod.CURRENT_STATE_URL]
 
     async def test_no_repeat_announcement_while_outage_persists(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
             snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is not None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is not None
 
         # Next snapshot, same-ish outage: stay quiet.
         serve(
@@ -255,14 +257,16 @@ class TestHydroOutagesTask:
                 updated_at=2000, customers=900, outages=2, areas=(("Somerset", 2, 900),)
             ),
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
 
-    async def test_doubling_outage_is_reannounced(self, api: respx.MockRouter) -> None:
+    async def test_doubling_outage_is_reannounced(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
         serve(
             api,
             snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
         )
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
 
         serve(
             api,
@@ -273,34 +277,36 @@ class TestHydroOutagesTask:
                 areas=(("Somerset", 5, 1700),),
             ),
         )
-        result = await outages_mod.hydro_outages(make_ctx())
+        result = await outages_mod.hydro_outages(make_ctx(state))
         assert result is not None and "1,700 customers out" in result
-        assert outages_mod._announced_customers == 1700
+        assert state.announced_customers == 1700
 
-    async def test_all_clear_is_announced_once(self, api: respx.MockRouter) -> None:
-        serve(
-            api,
-            snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
-        )
-        await outages_mod.hydro_outages(make_ctx())
-
-        serve(api, snapshot_responses(updated_at=2000, customers=12, outages=1))
-        result = await outages_mod.hydro_outages(make_ctx())
-        assert result == ("Hydro Ottawa: power mostly restored, 12 customers still out")
-        assert outages_mod._announced_customers is None
-
-        # Staying quiet afterwards: no all-clear repeats, no new announcement.
-        serve(api, snapshot_responses(updated_at=3000, customers=0, outages=0))
-        assert await outages_mod.hydro_outages(make_ctx()) is None
-
-    async def test_partial_restoration_is_not_announced(
-        self, api: respx.MockRouter
+    async def test_all_clear_is_announced_once(
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
             snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
         )
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
+
+        serve(api, snapshot_responses(updated_at=2000, customers=12, outages=1))
+        result = await outages_mod.hydro_outages(make_ctx(state))
+        assert result == ("Hydro Ottawa: power mostly restored, 12 customers still out")
+        assert state.announced_customers is None
+
+        # Staying quiet afterwards: no all-clear repeats, no new announcement.
+        serve(api, snapshot_responses(updated_at=3000, customers=0, outages=0))
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
+
+    async def test_partial_restoration_is_not_announced(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
+        serve(
+            api,
+            snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
+        )
+        await outages_mod.hydro_outages(make_ctx(state))
 
         # Down to 300: below the announce threshold but not yet resolved —
         # neither a new announcement nor an all-clear.
@@ -308,22 +314,24 @@ class TestHydroOutagesTask:
             api,
             snapshot_responses(updated_at=2000, customers=300, outages=1),
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
-        assert outages_mod._announced_customers == 800
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
+        assert state.announced_customers == 800
 
-    async def test_full_restoration_message(self, api: respx.MockRouter) -> None:
+    async def test_full_restoration_message(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
         serve(
             api,
             snapshot_responses(customers=800, outages=2, areas=(("Somerset", 2, 800),)),
         )
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
 
         serve(api, snapshot_responses(updated_at=2000, customers=0, outages=0))
-        result = await outages_mod.hydro_outages(make_ctx())
+        result = await outages_mod.hydro_outages(make_ctx(state))
         assert result == "Hydro Ottawa: power restored"
 
     async def test_storm_mode_announces_below_threshold(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
@@ -331,11 +339,11 @@ class TestHydroOutagesTask:
                 customers=100, outages=3, mode="STORM", areas=(("Somerset", 3, 100),)
             ),
         )
-        result = await outages_mod.hydro_outages(make_ctx())
+        result = await outages_mod.hydro_outages(make_ctx(state))
         assert result is not None and "STORM mode" in result
 
     async def test_no_all_clear_while_storm_mode_persists(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
@@ -343,18 +351,18 @@ class TestHydroOutagesTask:
                 customers=100, outages=3, mode="STORM", areas=(("Somerset", 3, 100),)
             ),
         )
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
 
         # Still STORM with few customers out: don't flap into an all-clear.
         serve(
             api,
             snapshot_responses(updated_at=2000, customers=10, outages=1, mode="STORM"),
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is None
-        assert outages_mod._announced_customers == 100
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
+        assert state.announced_customers == 100
 
     async def test_fetch_failure_propagates_without_touching_state(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         # No local catch-all: the runner logs a raising task and carries on.
         serve(
@@ -362,11 +370,11 @@ class TestHydroOutagesTask:
             {outages_mod.CURRENT_STATE_URL: httpx.ConnectError("network is down")},
         )
         with pytest.raises(httpx.ConnectError):
-            await outages_mod.hydro_outages(make_ctx())
-        assert outages_mod._last_updated_at is None
+            await outages_mod.hydro_outages(make_ctx(state))
+        assert state.last_updated_at is None
 
     async def test_failed_summary_fetch_is_retried_next_poll(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         # currentState succeeds but the snapshot files error: the snapshot
         # must not be marked processed, so the next poll retries it.
@@ -378,17 +386,17 @@ class TestHydroOutagesTask:
             },
         )
         with pytest.raises(httpx.HTTPStatusError):
-            await outages_mod.hydro_outages(make_ctx())
-        assert outages_mod._last_updated_at is None
+            await outages_mod.hydro_outages(make_ctx(state))
+        assert state.last_updated_at is None
 
         serve(
             api,
             snapshot_responses(customers=800, outages=1, areas=(("Somerset", 1, 800),)),
         )
-        assert await outages_mod.hydro_outages(make_ctx()) is not None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is not None
 
     async def test_summary_missing_customer_count_fails_the_poll(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         # An API change that drops total_cust_a must not read as "0
         # customers out" (which could fire a bogus all-clear); the poll
@@ -399,52 +407,56 @@ class TestHydroOutagesTask:
         responses[outages_mod.summary_url("data/guid-1")] = broken
         serve(api, responses)
         with pytest.raises(ValueError):
-            await outages_mod.hydro_outages(make_ctx())
-        assert outages_mod._last_updated_at is None
-        assert outages_mod._announced_customers is None
+            await outages_mod.hydro_outages(make_ctx(state))
+        assert state.last_updated_at is None
+        assert state.announced_customers is None
 
 
 class TestConditionalFetch:
     LAST_MODIFIED = {"Last-Modified": "Thu, 16 Jul 2026 11:19:47 GMT"}
 
-    async def test_first_fetch_is_unconditional(self, api: respx.MockRouter) -> None:
+    async def test_first_fetch_is_unconditional(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
         serve(api, snapshot_responses(customers=200))
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
         assert "If-Modified-Since" not in api.calls[0].request.headers
 
-    async def test_last_modified_is_sent_back(self, api: respx.MockRouter) -> None:
-        serve(
-            api,
-            snapshot_responses(customers=200),
-            response_headers=self.LAST_MODIFIED,
-        )
-        await outages_mod.hydro_outages(make_ctx())
-        assert outages_mod._state_last_modified == self.LAST_MODIFIED["Last-Modified"]
-
-        serve(api, snapshot_responses(customers=200))
-        await outages_mod.hydro_outages(make_ctx())
-        assert (
-            api.calls[0].request.headers["If-Modified-Since"]
-            == self.LAST_MODIFIED["Last-Modified"]
-        )
-
-    async def test_not_modified_fetches_nothing_downstream(
-        self, api: respx.MockRouter
+    async def test_last_modified_is_sent_back(
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         serve(
             api,
             snapshot_responses(customers=200),
             response_headers=self.LAST_MODIFIED,
         )
-        await outages_mod.hydro_outages(make_ctx())
+        await outages_mod.hydro_outages(make_ctx(state))
+        assert state.state_last_modified == self.LAST_MODIFIED["Last-Modified"]
+
+        serve(api, snapshot_responses(customers=200))
+        await outages_mod.hydro_outages(make_ctx(state))
+        assert (
+            api.calls[0].request.headers["If-Modified-Since"]
+            == self.LAST_MODIFIED["Last-Modified"]
+        )
+
+    async def test_not_modified_fetches_nothing_downstream(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
+        serve(
+            api,
+            snapshot_responses(customers=200),
+            response_headers=self.LAST_MODIFIED,
+        )
+        await outages_mod.hydro_outages(make_ctx(state))
 
         serve(api, {outages_mod.CURRENT_STATE_URL: NOT_MODIFIED})
-        assert await outages_mod.hydro_outages(make_ctx()) is None
+        assert await outages_mod.hydro_outages(make_ctx(state)) is None
         assert requested(api) == [outages_mod.CURRENT_STATE_URL]
-        assert outages_mod._state_last_modified == self.LAST_MODIFIED["Last-Modified"]
+        assert state.state_last_modified == self.LAST_MODIFIED["Last-Modified"]
 
     async def test_validator_is_only_kept_after_a_successful_poll(
-        self, api: respx.MockRouter
+        self, state: OutageState, api: respx.MockRouter
     ) -> None:
         # A failed downstream fetch must leave the next poll unconditional,
         # so the snapshot can't get stuck behind 304s.
@@ -457,18 +469,18 @@ class TestConditionalFetch:
             response_headers=self.LAST_MODIFIED,
         )
         with pytest.raises(httpx.HTTPStatusError):
-            await outages_mod.hydro_outages(make_ctx())
-        assert outages_mod._state_last_modified is None
+            await outages_mod.hydro_outages(make_ctx(state))
+        assert state.state_last_modified is None
 
 
 class TestFailedFetch:
     """Failures propagate for the runner to log, leaving the poll retryable."""
 
     @staticmethod
-    def assert_retryable() -> None:
-        assert outages_mod._last_updated_at is None
-        assert outages_mod._state_last_modified is None
-        assert outages_mod._announced_customers is None
+    def assert_retryable(state: OutageState) -> None:
+        assert state.last_updated_at is None
+        assert state.state_last_modified is None
+        assert state.announced_customers is None
 
     # 301: httpx doesn't follow redirects unless told to, so a moved endpoint
     # fails here rather than being chased.
@@ -482,13 +494,13 @@ class TestFailedFetch:
         ],
     )
     async def test_error_status(
-        self, api: respx.MockRouter, failing: str, status: int
+        self, state: OutageState, api: respx.MockRouter, failing: str, status: int
     ) -> None:
         responses = snapshot_responses(customers=800, outages=1)
         serve(api, {**responses, failing: httpx.Response(status)})
         with pytest.raises(httpx.HTTPStatusError):
-            await outages_mod.hydro_outages(make_ctx())
-        self.assert_retryable()
+            await outages_mod.hydro_outages(make_ctx(state))
+        self.assert_retryable(state)
 
     @pytest.mark.parametrize(
         "error",
@@ -497,11 +509,13 @@ class TestFailedFetch:
             httpx.ReadTimeout("read timed out"),
         ],
     )
-    async def test_timeout(self, api: respx.MockRouter, error: Exception) -> None:
+    async def test_timeout(
+        self, state: OutageState, api: respx.MockRouter, error: Exception
+    ) -> None:
         serve(api, {outages_mod.CURRENT_STATE_URL: error})
         with pytest.raises(httpx.TimeoutException):
-            await outages_mod.hydro_outages(make_ctx())
-        self.assert_retryable()
+            await outages_mod.hydro_outages(make_ctx(state))
+        self.assert_retryable(state)
 
     @pytest.mark.parametrize(
         "body", [b"<html>Service Unavailable</html>", b"", b'{"updatedAt": ']
@@ -515,33 +529,37 @@ class TestFailedFetch:
         ],
     )
     async def test_malformed_json(
-        self, api: respx.MockRouter, failing: str, body: bytes
+        self, state: OutageState, api: respx.MockRouter, failing: str, body: bytes
     ) -> None:
         responses = snapshot_responses(customers=800, outages=1)
         serve(api, {**responses, failing: httpx.Response(200, content=body)})
         with pytest.raises(json.JSONDecodeError):
-            await outages_mod.hydro_outages(make_ctx())
-        self.assert_retryable()
+            await outages_mod.hydro_outages(make_ctx(state))
+        self.assert_retryable(state)
 
-    async def test_retried_after_a_transient_error(self, api: respx.MockRouter) -> None:
+    async def test_retried_after_a_transient_error(
+        self, state: OutageState, api: respx.MockRouter
+    ) -> None:
         serve(
             api,
             {outages_mod.CURRENT_STATE_URL: httpx.Response(503)},
         )
         with pytest.raises(httpx.HTTPStatusError):
-            await outages_mod.hydro_outages(make_ctx())
+            await outages_mod.hydro_outages(make_ctx(state))
 
         serve(
             api,
             snapshot_responses(customers=800, outages=1, areas=(("Somerset", 1, 800),)),
         )
-        result = await outages_mod.hydro_outages(make_ctx())
+        result = await outages_mod.hydro_outages(make_ctx(state))
         assert result == "Hydro Ottawa: 800 customers out (1 outage): Somerset 800"
 
 
-async def test_request_carries_a_timeout(api: respx.MockRouter) -> None:
+async def test_request_carries_a_timeout(
+    state: OutageState, api: respx.MockRouter
+) -> None:
     serve(api, snapshot_responses(customers=200))
-    await outages_mod.hydro_outages(make_ctx())
+    await outages_mod.hydro_outages(make_ctx(state))
     assert {
         value
         for call in api.calls

@@ -78,6 +78,17 @@ handlers can record spans unconditionally.
   dropped with an error if the bot hasn't joined it). Try it interactively
   with `uv run ottobot --simulate` and `/task <name>`. See
   `src/ottobot/tasks/weather_alerts.py` for an example.
+- **Handler state goes in `state=`, not module globals**: a command or task
+  that remembers things between calls declares a dataclass and passes it as
+  `@command(..., state=MyState)` / `@task(..., state=MyState)`. Each bot
+  builds one instance when it registers the handler and passes it as
+  `ctx.state` on every call — mutate it in place. Annotate the argument as
+  `ctx: Context[MyState]` / `ctx: TaskContext[MyState]` so `ty` checks the
+  fields (it flags a handler whose annotation doesn't match its `state=`).
+  State is in memory only and resets on restart. In tests, build the
+  context with `state=MyState()` directly, or read it back from the bot via
+  `bot.command_state(name)` / `bot.task_state(name)`; there's nothing to
+  monkeypatch. See `src/ottobot/tasks/weather_alerts.py`.
 - **Module docstrings double as help text/usage** — e.g.
   `"""!ping — check that the bot is alive..."""`. Follow this style for new
   commands.

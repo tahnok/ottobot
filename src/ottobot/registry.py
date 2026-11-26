@@ -13,15 +13,20 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .bot import Ottobot
     from .channels import ChannelConfig
     from .context import Context, TaskContext
 
-CommandHandler = Callable[["Context"], Awaitable[str | None]]
-TaskHandler = Callable[["TaskContext"], Awaitable[str | None]]
+# The handler types as stored by the framework: whatever state type a
+# handler declares, it's held here as Context[Any] / TaskContext[Any].
+CommandHandler = Callable[["Context[Any]"], Awaitable[str | None]]
+TaskHandler = Callable[["TaskContext[Any]"], Awaitable[str | None]]
+# A zero-argument callable (usually a dataclass) that builds a handler's
+# initial state; see the state= argument of @command / @task.
+StateFactory = Callable[[], Any]
 OnStartHandler = Callable[["Ottobot"], Awaitable[None]]
 
 _COMMAND_ATTR = "_ottobot_command"
@@ -38,6 +43,9 @@ class Command:
     for this command to run (e.g. "ottobot !ping"). Set it False for
     commands that should answer any channel message carrying the prefix,
     without the name.
+
+    state, when set, is called once per bot to build the object the
+    handler sees as ctx.state on every call (see @command).
     """
 
     name: str
@@ -45,6 +53,7 @@ class Command:
     help: str = ""
     aliases: tuple[str, ...] = ()
     requires_address: bool = True
+    state: StateFactory | None = None
 
 
 @dataclass
@@ -58,6 +67,9 @@ class ScheduledTask:
     every day at each of those times, and never at startup. channel is the
     channel the task's output is broadcast on, referenced directly as one
     of the ``ottobot.channels`` constants (e.g. ``OTT_ALERTS``).
+
+    state, when set, is called once per bot to build the object the
+    handler sees as ctx.state on every run (see @task).
     """
 
     name: str
@@ -66,6 +78,7 @@ class ScheduledTask:
     channel: "ChannelConfig"
     help: str = ""
     at: tuple[time, ...] = ()
+    state: StateFactory | None = None
 
     def __post_init__(self) -> None:
         if (self.interval is None) == (not self.at):
@@ -99,44 +112,61 @@ class ScheduledTask:
         return min(candidates)
 
 
-def command(
+def command[S = None](
     name: str,
     *,
     help: str = "",
     aliases: tuple[str, ...] = (),
     requires_address: bool = True,
-) -> Callable[[CommandHandler], CommandHandler]:
-    """Mark a module-level coroutine as a command handler."""
+    state: Callable[[], S] | None = None,
+) -> Callable[
+    [Callable[["Context[S]"], Awaitable[str | None]]],
+    Callable[["Context[S]"], Awaitable[str | None]],
+]:
+    """Mark a module-level coroutine as a command handler.
+
+    Pass state= a zero-argument factory (typically a dataclass) for a
+    handler that needs to remember things between calls: each bot calls
+    it once at registration, and the handler gets the result as ctx.state
+    on every call. Mutate it in place; annotate the handler's argument as
+    ``Context[YourState]`` so the type checker knows its fields.
+    """
 
     def decorator(handler: CommandHandler) -> CommandHandler:
         setattr(
             handler,
             _COMMAND_ATTR,
-            Command(name, handler, help, aliases, requires_address),
+            Command(name, handler, help, aliases, requires_address, state),
         )
         return handler
 
     return decorator
 
 
-def task(
+def task[S = None](
     name: str,
     *,
     channel: "ChannelConfig",
     interval: timedelta | None = None,
     at: tuple[time, ...] = (),
     help: str = "",
-) -> Callable[[TaskHandler], TaskHandler]:
+    state: Callable[[], S] | None = None,
+) -> Callable[
+    [Callable[["TaskContext[S]"], Awaitable[str | None]]],
+    Callable[["TaskContext[S]"], Awaitable[str | None]],
+]:
     """Mark a module-level coroutine as a scheduled task handler.
 
-    Give exactly one of interval= or at= (see ScheduledTask).
+    Give exactly one of interval= or at= (see ScheduledTask). state= works
+    as for @command: the handler gets the object it builds as ctx.state,
+    one per bot, kept across runs — use it rather than module globals.
     """
 
     def decorator(handler: TaskHandler) -> TaskHandler:
         setattr(
             handler,
             _TASK_ATTR,
-            ScheduledTask(name, handler, interval, channel, help, at),
+            ScheduledTask(name, handler, interval, channel, help, at, state),
         )
         return handler
 

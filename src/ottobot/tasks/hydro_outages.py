@@ -34,6 +34,7 @@ and an ongoing significant outage is announced once on startup.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
@@ -66,13 +67,19 @@ ALL_CLEAR_BELOW = 50
 # Mesh packet budget for a single message, measured in UTF-8 bytes.
 MAX_MESSAGE_LEN = 140
 
-# currentState.updatedAt of the last fully processed snapshot.
-_last_updated_at: int | None = None
-# Last-Modified from the currentState response of that snapshot, sent back
-# as If-Modified-Since so an unchanged pointer is a bodyless 304.
-_state_last_modified: str | None = None
-# Customers affected when we last announced; None = no active announcement.
-_announced_customers: int | None = None
+
+@dataclass
+class OutageState:
+    """What the task remembers between polls (the bot keeps one per run)."""
+
+    # currentState.updatedAt of the last fully processed snapshot.
+    last_updated_at: int | None = None
+    # Last-Modified from the currentState response of that snapshot, sent
+    # back as If-Modified-Since so an unchanged pointer is a bodyless 304.
+    state_last_modified: str | None = None
+    # Customers affected when we last announced; None = no active
+    # announcement.
+    announced_customers: int | None = None
 
 
 def summary_url(interval_path: str) -> str:
@@ -161,12 +168,13 @@ async def _get_json(client: httpx.AsyncClient, url: str) -> Any:
     interval=timedelta(minutes=10),
     channel=OTT_ALERTS,
     help="Announce significant Hydro Ottawa power outages",
+    state=OutageState,
 )
-async def hydro_outages(ctx: TaskContext) -> str | None:
-    global _last_updated_at, _state_last_modified, _announced_customers
+async def hydro_outages(ctx: TaskContext[OutageState]) -> str | None:
+    state = ctx.state
     headers = {}
-    if _state_last_modified is not None:
-        headers["If-Modified-Since"] = _state_last_modified
+    if state.state_last_modified is not None:
+        headers["If-Modified-Since"] = state.state_last_modified
     # A failed fetch just raises: the runner (and simulator) log a raising
     # task and keep the schedule going.
     async with httpx.AsyncClient(timeout=20) as client:
@@ -174,13 +182,13 @@ async def hydro_outages(ctx: TaskContext) -> str | None:
         if response.status_code == 304:
             return None
         response.raise_for_status()
-        state = response.json()
+        current = response.json()
         state_last_modified = response.headers.get("Last-Modified")
-        updated_at = state.get("updatedAt")
-        if updated_at is not None and updated_at == _last_updated_at:
-            _state_last_modified = state_last_modified
+        updated_at = current.get("updatedAt")
+        if updated_at is not None and updated_at == state.last_updated_at:
+            state.state_last_modified = state_last_modified
             return None
-        interval_path = state["data"]["interval_generation_data"]
+        interval_path = current["data"]["interval_generation_data"]
 
         summary = await _get_json(client, summary_url(interval_path))
         file_data = summary["summaryFileData"]
@@ -190,28 +198,28 @@ async def hydro_outages(ctx: TaskContext) -> str | None:
         storm = (file_data.get("page_mode") or {}).get("mode") == "STORM"
 
         announcement: str | None = None
-        if _announced_customers is None:
+        if state.announced_customers is None:
             if storm or customers >= MIN_CUSTOMERS_AFFECTED:
                 report = await _get_json(client, ward_report_url(interval_path))
                 announcement = format_announcement(
                     customers, outages, affected_areas(report), storm
                 )
-                _announced_customers = customers
+                state.announced_customers = customers
         elif customers < ALL_CLEAR_BELOW and not storm:
             announcement = format_all_clear(customers)
-            _announced_customers = None
+            state.announced_customers = None
         elif customers >= ESCALATION_FACTOR * max(
-            _announced_customers, MIN_CUSTOMERS_AFFECTED
+            state.announced_customers, MIN_CUSTOMERS_AFFECTED
         ):
             report = await _get_json(client, ward_report_url(interval_path))
             announcement = format_announcement(
                 customers, outages, affected_areas(report), storm
             )
-            _announced_customers = customers
+            state.announced_customers = customers
 
     # Only mark the snapshot processed (and keep its validator) once
     # everything above succeeded, so a failed downstream fetch is retried
     # unconditionally on the next poll.
-    _last_updated_at = updated_at
-    _state_last_modified = state_last_modified
+    state.last_updated_at = updated_at
+    state.state_last_modified = state_last_modified
     return announcement

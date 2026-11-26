@@ -13,6 +13,7 @@ from ottobot.config import BotConfig
 from ottobot.context import TaskContext
 from ottobot.registry import module_tasks
 from ottobot.tasks import weather_alerts as alerts_mod
+from ottobot.tasks.weather_alerts import AlertsState
 
 # A real response from Environment Canada's modern weather-alerts API,
 # trimmed to a few features (geometry replaced with a placeholder point).
@@ -132,10 +133,10 @@ def with_feature(
     return {**payload, "features": [*payload["features"], feature]}
 
 
-@pytest.fixture(autouse=True)
-def reset_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(alerts_mod, "_seen", set())
-    monkeypatch.setattr(alerts_mod, "_primed", False)
+@pytest.fixture
+def state() -> AlertsState:
+    """A fresh task state per test, as a newly started bot would build."""
+    return AlertsState()
 
 
 def serve(
@@ -155,11 +156,11 @@ def serve(
         route.mock(return_value=response or httpx.Response(200, json=payload))
 
 
-def make_ctx(replies: list[str]) -> TaskContext:
+def make_ctx(replies: list[str], state: AlertsState) -> TaskContext[AlertsState]:
     async def reply(text: str) -> None:
         replies.append(text)
 
-    return TaskContext(_reply=reply, config=BotConfig())
+    return TaskContext(_reply=reply, config=BotConfig(), state=state)
 
 
 def test_task_announces_on_the_ott_alerts_channel() -> None:
@@ -342,26 +343,30 @@ class TestParseAlerts:
 
 class TestWeatherAlertsTask:
     async def test_first_run_primes_without_announcing(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         serve(api, payload=AQW)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
-        assert alerts_mod._seen == {"Air Quality Warning"}
+        assert state.seen == {"Air Quality Warning"}
 
-    async def test_query_is_scoped_to_ottawa(self, api: respx.MockRouter) -> None:
+    async def test_query_is_scoped_to_ottawa(
+        self, state: AlertsState, api: respx.MockRouter
+    ) -> None:
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))
+        await alerts_mod.weather_alerts(make_ctx([], state))
         # What's on the wire, as httpx encoded it from _PARAMS.
         assert dict(api.calls.last.request.url.params) == {
             key: str(value) for key, value in alerts_mod._PARAMS.items()
         }
         assert api.calls.last.request.url.params["bbox"] == "-76.1,45.15,-75.4,45.55"
 
-    async def test_second_run_announces_new_alert(self, api: respx.MockRouter) -> None:
+    async def test_second_run_announces_new_alert(
+        self, state: AlertsState, api: respx.MockRouter
+    ) -> None:
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         updated = with_feature(
             AQW,
@@ -372,17 +377,17 @@ class TestWeatherAlertsTask:
         )
         serve(api, payload=updated)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["Severe Thunderstorm Watch"]
 
     async def test_ongoing_multi_polygon_alert_is_not_reannounced(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # The AQW is primed as two polygons; on the next fetch its polygons
         # differ (EC returns a different polygon set) but the bulletin id is
         # unchanged, so it must not be announced again.
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         reshaped = {
             "features": [
@@ -398,14 +403,14 @@ class TestWeatherAlertsTask:
         }
         serve(api, payload=reshaped)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
 
     async def test_two_alerts_in_one_bulletin_are_both_announced(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         two = with_feature(
             with_feature(
@@ -422,20 +427,20 @@ class TestWeatherAlertsTask:
         )
         serve(api, payload=two)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["Heat Warning", "Severe Thunderstorm Watch"]
 
     async def test_severe_weather_event_announces_each_alert_once(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # Real capture: 13 polygons -> 3 announcements, each on its own
         # packet, oldest-first, with the tornado warning among them.
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=TORNADO_PAYLOAD)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == [
             "Severe Thunderstorm Watch",
             "Severe Thunderstorm Warning",
@@ -443,23 +448,23 @@ class TestWeatherAlertsTask:
         ]
 
     async def test_one_event_issued_per_region_is_announced_once(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # Real capture: the heavy-rain statement arrives as an Ontario-side
         # and a Gatineau bulletin, but says the same thing on both.
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=STATEMENTS_PAYLOAD)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == [WATCH_MSG, STATEMENT_MSG]
         assert all(
             len(r.encode("utf-8")) <= alerts_mod.MAX_MESSAGE_LEN for r in replies
         )
 
     async def test_second_bulletin_of_a_live_event_is_not_reannounced(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # The Ontario-side statement is live and announced; the Gatineau one
         # is issued a fetch later with the same headline, and must not repeat
@@ -469,128 +474,130 @@ class TestWeatherAlertsTask:
             "features": STATEMENTS_PAYLOAD["features"][1:2],
         }
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=ontario)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == [STATEMENT_MSG]
 
         serve(api, payload=STATEMENTS_PAYLOAD)
         replies = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == [WATCH_MSG]
 
     async def test_unchanged_collection_announces_nothing(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
 
     async def test_fetch_failure_propagates_without_priming(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # No local catch-all: the runner logs a raising task and carries on.
         serve(api, error=httpx.ConnectError("network is down"))
         replies: list[str] = []
         with pytest.raises(httpx.ConnectError):
-            await alerts_mod.weather_alerts(make_ctx(replies))
+            await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
-        assert alerts_mod._primed is False
+        assert state.primed is False
 
     async def test_all_clear_announced_once_when_alerts_end(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=EMPTY)  # alerts cleared
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["No alerts in effect"]
-        assert alerts_mod._seen == set()
+        assert state.seen == set()
 
         # A subsequent empty fetch must not repeat the all-clear.
         serve(api, payload=EMPTY)
         replies = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
 
     async def test_all_clear_fires_while_the_ended_alert_lingers(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # The ended bulletin sits in the collection for hours after the
         # weather is over; the all-clear must not wait for it to age out.
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=ended(AQW))
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["No alerts in effect"]
 
     async def test_an_alert_ending_is_not_announced(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # The closing line an ended bulletin picks up would otherwise read
         # as a new alert, since it changes the announced text.
         serve(api, payload=EMPTY)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, payload=AQW)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["Air Quality Warning"]
 
         serve(api, payload=ended(AQW))
         replies = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == ["No alerts in effect"]
 
     async def test_seen_alerts_are_pruned_when_alerts_leave(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # _seen must track the live collection, not grow forever on a
         # long-running bot: once an alert is gone, its entry goes too.
         serve(api, payload=FIXTURE_PAYLOAD)
-        await alerts_mod.weather_alerts(make_ctx([]))  # primes AQW + heat
-        assert len(alerts_mod._seen) == 2
+        await alerts_mod.weather_alerts(make_ctx([], state))  # primes AQW + heat
+        assert len(state.seen) == 2
 
         serve(api, payload=AQW)  # only the AQW remains
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._seen == {"Air Quality Warning"}
+        await alerts_mod.weather_alerts(make_ctx([], state))
+        assert state.seen == {"Air Quality Warning"}
 
     async def test_no_active_alerts_primes_to_empty(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         serve(api, payload=EMPTY)
         replies: list[str] = []
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
-        assert alerts_mod._seen == set()
-        assert alerts_mod._primed is True
+        assert state.seen == set()
+        assert state.primed is True
 
 
 class TestFailedFetch:
     """Failures propagate for the runner to log, with nothing said or changed."""
 
     @staticmethod
-    async def assert_fails(expected: type[Exception]) -> None:
+    async def assert_fails(state: AlertsState, expected: type[Exception]) -> None:
         replies: list[str] = []
         with pytest.raises(expected):
-            await alerts_mod.weather_alerts(make_ctx(replies))
+            await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
-        assert alerts_mod._primed is False
+        assert state.primed is False
 
     # 301: httpx doesn't follow redirects unless told to, so a moved endpoint
     # fails here rather than being chased.
     @pytest.mark.parametrize("status", [301, 404, 429, 500, 503])
-    async def test_error_status(self, api: respx.MockRouter, status: int) -> None:
+    async def test_error_status(
+        self, state: AlertsState, api: respx.MockRouter, status: int
+    ) -> None:
         serve(api, response=httpx.Response(status, json=AQW))
-        await self.assert_fails(httpx.HTTPStatusError)
+        await self.assert_fails(state, httpx.HTTPStatusError)
 
     @pytest.mark.parametrize(
         "error",
@@ -601,55 +608,63 @@ class TestFailedFetch:
         ],
     )
     async def test_transport_error(
-        self, api: respx.MockRouter, error: Exception
+        self, state: AlertsState, api: respx.MockRouter, error: Exception
     ) -> None:
         serve(api, error=error)
-        await self.assert_fails(type(error))
+        await self.assert_fails(state, type(error))
 
     @pytest.mark.parametrize(
         "body", [b"<html>Service Unavailable</html>", b"", b'{"features": [']
     )
-    async def test_malformed_json(self, api: respx.MockRouter, body: bytes) -> None:
+    async def test_malformed_json(
+        self, state: AlertsState, api: respx.MockRouter, body: bytes
+    ) -> None:
         serve(api, response=httpx.Response(200, content=body))
-        await self.assert_fails(json.JSONDecodeError)
+        await self.assert_fails(state, json.JSONDecodeError)
 
-    async def test_json_that_is_not_a_collection(self, api: respx.MockRouter) -> None:
+    async def test_json_that_is_not_a_collection(
+        self, state: AlertsState, api: respx.MockRouter
+    ) -> None:
         # A shape change fails the poll loudly instead of reading as "fetch
         # failed" (or as no alerts).
         serve(api, response=httpx.Response(200, json=["not", "a", "collection"]))
-        await self.assert_fails(AttributeError)
+        await self.assert_fails(state, AttributeError)
 
-    async def test_next_poll_recovers(self, api: respx.MockRouter) -> None:
+    async def test_next_poll_recovers(
+        self, state: AlertsState, api: respx.MockRouter
+    ) -> None:
         serve(api, response=httpx.Response(503))
         with pytest.raises(httpx.HTTPStatusError):
-            await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._primed is False
+            await alerts_mod.weather_alerts(make_ctx([], state))
+        assert state.primed is False
 
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))
-        assert alerts_mod._seen == {"Air Quality Warning"}
+        await alerts_mod.weather_alerts(make_ctx([], state))
+        assert state.seen == {"Air Quality Warning"}
 
     async def test_failure_mid_alert_keeps_what_was_seen(
-        self, api: respx.MockRouter
+        self, state: AlertsState, api: respx.MockRouter
     ) -> None:
         # An outage while an alert is live must neither sound the all-clear
         # nor make the alert read as new once the API is back.
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx([]))  # priming run
+        await alerts_mod.weather_alerts(make_ctx([], state))  # priming run
 
         serve(api, response=httpx.Response(503))
         replies: list[str] = []
         with pytest.raises(httpx.HTTPStatusError):
-            await alerts_mod.weather_alerts(make_ctx(replies))
+            await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
-        assert alerts_mod._seen == {"Air Quality Warning"}
+        assert state.seen == {"Air Quality Warning"}
 
         serve(api, payload=AQW)
-        await alerts_mod.weather_alerts(make_ctx(replies))
+        await alerts_mod.weather_alerts(make_ctx(replies, state))
         assert replies == []
 
 
-async def test_request_carries_a_timeout(api: respx.MockRouter) -> None:
+async def test_request_carries_a_timeout(
+    state: AlertsState, api: respx.MockRouter
+) -> None:
     serve(api, payload=EMPTY)
-    await alerts_mod.weather_alerts(make_ctx([]))
+    await alerts_mod.weather_alerts(make_ctx([], state))
     assert set(api.calls.last.request.extensions["timeout"].values()) == {10}

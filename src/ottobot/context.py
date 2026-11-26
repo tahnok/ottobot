@@ -81,9 +81,20 @@ class IncomingMessage:
 ReplyFunc = Callable[[str], Awaitable[None]]
 
 
+# The default for a context's state field. Typed Any so it satisfies any
+# state type S: the framework always passes the real state when the handler
+# declared one, so S is only ever left at None for handlers that didn't.
+_NO_STATE: Any = None
+
+
 @dataclass(frozen=True)
-class Context:
-    """What a command handler gets to work with."""
+class Context[S = None]:
+    """What a command handler gets to work with.
+
+    S is the type of the handler's state: whatever its @command(state=...)
+    factory builds, kept by the bot across calls and exposed as
+    ctx.state. It's None for a handler without state, and for sinks.
+    """
 
     message: IncomingMessage
     command_name: str | None
@@ -92,6 +103,8 @@ class Context:
     # The loaded bot config, so sinks/commands can read settings (e.g. the
     # discord sink's webhook URL). Defaults to an empty config.
     config: BotConfig = field(default_factory=BotConfig)
+    # This handler's persistent state (see S above); mutate it in place.
+    state: S = _NO_STATE
 
     @property
     def sender_name(self) -> str | None:
@@ -123,16 +136,19 @@ class Context:
 
 
 @dataclass(frozen=True)
-class TaskContext:
+class TaskContext[S = None]:
     """What a scheduled task handler gets to work with.
 
     Unlike Context, there's no incoming message — scheduled tasks run on a
     timer, not in response to mesh traffic. reply() sends wherever the
     runner has wired this task's output (the task's declared channel).
+    state is the task's persistent state, as for Context: the object its
+    @task(state=...) factory built, kept across runs; None without one.
     """
 
     _reply: ReplyFunc
     config: BotConfig = field(default_factory=BotConfig)
+    state: S = _NO_STATE
 
     async def reply(self, text: str) -> None:
         await self._reply(text)

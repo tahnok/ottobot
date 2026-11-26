@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import time, timedelta
+from typing import Any
 
 from opentelemetry.trace import Span, StatusCode
 
@@ -20,6 +21,7 @@ from .registry import (
     CommandHandler,
     OnStartHandler,
     ScheduledTask,
+    StateFactory,
     TaskHandler,
 )
 from .context import Context, IncomingMessage, ReplyFunc
@@ -72,6 +74,11 @@ class Ottobot:
         self.sinks: list[CommandHandler] = []
         self.tasks: list[ScheduledTask] = []
         self._on_start: list[OnStartHandler] = []
+        # Each stateful command's/task's state, built once from its state=
+        # factory when it's registered and keyed by ("command"|"task", name).
+        # It lives on the bot rather than the shared module-level marker, so
+        # every Ottobot starts fresh.
+        self._state: dict[tuple[str, str], Any] = {}
         self.add_command(
             Command(name="help", handler=self._help, help="List available commands")
         )
@@ -99,6 +106,7 @@ class Ottobot:
         interval: timedelta | None = None,
         at: tuple[time, ...] = (),
         help: str = "",
+        state: StateFactory | None = None,
     ) -> Callable[[TaskHandler], TaskHandler]:
         """Decorator that registers a scheduled task handler.
 
@@ -106,7 +114,9 @@ class Ottobot:
         """
 
         def decorator(handler: TaskHandler) -> TaskHandler:
-            self.add_task(ScheduledTask(name, handler, interval, channel, help, at))
+            self.add_task(
+                ScheduledTask(name, handler, interval, channel, help, at, state)
+            )
             return handler
 
         return decorator
@@ -118,6 +128,8 @@ class Ottobot:
                 raise ValueError(f"command name {key!r} is already registered")
         for key in keys:
             self._commands[key] = command
+        if command.state is not None:
+            self._state["command", command.name] = command.state()
 
     def get_command(self, name: str) -> Command | None:
         return self._commands.get(name.lower())
@@ -132,6 +144,16 @@ class Ottobot:
 
     def add_task(self, task: ScheduledTask) -> None:
         self.tasks.append(task)
+        if task.state is not None:
+            self._state["task", task.name] = task.state()
+
+    def command_state(self, name: str) -> Any:
+        """The state object of the command *name* (None if it has none)."""
+        return self._state.get(("command", name))
+
+    def task_state(self, name: str) -> Any:
+        """The state object of the task *name* (None if it has none)."""
+        return self._state.get(("task", name))
 
     def add_on_start(self, hook: OnStartHandler) -> None:
         self._on_start.append(hook)
@@ -266,6 +288,7 @@ class Ottobot:
             args=args,
             _reply=counted_reply,
             config=self.config,
+            state=self.command_state(command.name),
         )
         try:
             with tracer().start_as_current_span(
