@@ -149,7 +149,11 @@ class Simulator:
         async def reply(text: str) -> None:
             replies.append(text)
 
-        ctx = TaskContext(_reply=reply, config=self.bot.config)
+        ctx = TaskContext(
+            _reply=reply,
+            config=self.bot.config,
+            state=self.bot.task_state(scheduled.name),
+        )
         try:
             result = await scheduled.handler(ctx)
         except Exception as exc:

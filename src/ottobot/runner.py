@@ -314,7 +314,11 @@ class MeshCoreRunner:
         async def broadcast(text: str) -> None:
             await self._broadcast(text, scheduled.channel)
 
-        ctx = TaskContext(_reply=broadcast, config=self.bot.config)
+        ctx = TaskContext(
+            _reply=broadcast,
+            config=self.bot.config,
+            state=self.bot.task_state(scheduled.name),
+        )
         # A task run has no incoming message, so its span is a trace root
         # of its own (see ottobot.telemetry).
         with tracer().start_as_current_span(

@@ -93,17 +93,12 @@ class TestHydroOutages:
             assert outages_mod._val(area["cust_a"]) >= 0
         outages_mod.affected_areas(report)
 
-    async def test_the_task_runs_end_to_end(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(outages_mod, "_last_updated_at", None)
-        monkeypatch.setattr(outages_mod, "_state_last_modified", None)
-        monkeypatch.setattr(outages_mod, "_announced_customers", None)
-
+    async def test_the_task_runs_end_to_end(self) -> None:
         async def reply(text: str) -> None:
             raise AssertionError("task should return its announcement, not reply()")
 
-        ctx = TaskContext(_reply=reply, config=BotConfig())
+        state = outages_mod.OutageState()
+        ctx = TaskContext(_reply=reply, config=BotConfig(), state=state)
         result = await outages_mod.hydro_outages(ctx)
         assert result is None or result.startswith("Hydro Ottawa: ")
-        assert outages_mod._last_updated_at is not None
+        assert state.last_updated_at is not None
