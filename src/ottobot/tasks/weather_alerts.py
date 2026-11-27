@@ -32,6 +32,7 @@ import httpx
 
 from ottobot import TaskContext, task
 from ottobot.channels import OTT_ALERTS
+from ottobot.messages import MAX_MESSAGE_LEN, fits
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,6 @@ _PARAMS = {
 # rather than a day late.
 ENDED = "ended"
 
-# MeshCore truncates a channel message past ~140 UTF-8 bytes, so an alert
-# only carries its headline when the two together stay under that.
-MAX_MESSAGE_LEN = 140
 
 # Announced once when the last active alert clears: the empty collection
 # carries no entry to announce, so the message is synthesized here.
@@ -136,7 +134,7 @@ def _title(props: dict[str, Any], key: str) -> str:
     if not summary:
         return title
     with_summary = f"{title}: {summary}"
-    if len(with_summary.encode("utf-8")) > MAX_MESSAGE_LEN:
+    if not fits(with_summary):
         return title
     return with_summary
 

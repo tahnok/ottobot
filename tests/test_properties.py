@@ -19,7 +19,7 @@ from hypothesis import strategies as st
 from helpers import ReplyRecorder, addressed, channel_msg
 from ottobot import Ottobot
 from ottobot.beacon import PACKET_HASH_SIZE, PAYLOAD_TYPE_TRACE, packet_hash
-from ottobot.bot import MAX_MESSAGE_LEN
+from ottobot.messages import MAX_MESSAGE_LEN
 from ottobot.channels import COMMAND_CHANNELS
 from ottobot.commands import echo, register_module, roll
 from ottobot.context import Context, IncomingMessage, split_path

@@ -94,7 +94,11 @@ handlers can record spans unconditionally.
 - **Handlers must not block** — they run in the bot's single event loop. No
   blocking I/O or long computation; use `asyncio`-friendly APIs.
 - **Keep replies short** — mesh bandwidth is limited; aim for a single
-  packet.
+  packet (`MAX_MESSAGE_LEN`, 140 UTF-8 bytes, in `src/ottobot/messages.py`).
+  If output can run longer (a listing, say), split it with
+  `pack_messages(...)` from the same module and send the pieces with
+  `ctx.reply_many(...)` (see `src/ottobot/commands/channels.py`); use
+  `fits(...)` to check a single string.
 - **Command/alias names must be unique** — duplicates raise `ValueError` at
   registration time (caught by CI via `load_commands()` at bot construction
   / tests).
