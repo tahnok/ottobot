@@ -2,7 +2,7 @@ import pytest
 
 from helpers import ReplyRecorder, addressed
 from ottobot import Ottobot
-from ottobot.bot import MAX_MESSAGE_LEN
+from ottobot.messages import MAX_MESSAGE_LEN
 from ottobot.commands import channels, register_module
 
 

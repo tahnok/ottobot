@@ -41,6 +41,7 @@ import httpx
 
 from ottobot import TaskContext, task
 from ottobot.channels import OTT_ALERTS
+from ottobot.messages import MAX_MESSAGE_LEN, fits
 
 # Stable deployment identifiers embedded in the outage map's page
 # (docs/hydro-ottawa-outages-api.md); re-derive from the page if requests
@@ -63,8 +64,6 @@ ESCALATION_FACTOR = 2
 # ...and send one all-clear when the affected count falls below this.
 ALL_CLEAR_BELOW = 50
 
-# Mesh packet budget for a single message, measured in UTF-8 bytes.
-MAX_MESSAGE_LEN = 140
 
 # currentState.updatedAt of the last fully processed snapshot.
 _last_updated_at: int | None = None
@@ -139,7 +138,7 @@ def format_announcement(
         left_out = len(areas) - count
         suffix = f" +{left_out} more" if left_out else ""
         candidate = f"{head}: {listed}{suffix}"
-        if len(candidate.encode("utf-8")) <= MAX_MESSAGE_LEN:
+        if fits(candidate):
             best = candidate
     return best
 

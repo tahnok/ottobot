@@ -6,7 +6,7 @@ it on Beacon, which shows every observer that heard it and the routes it took.
 
 from ottobot import Context, command
 from ottobot.beacon import packet_url
-from ottobot.bot import MAX_MESSAGE_LEN
+from ottobot.messages import fits
 
 
 @command("ping", help="Check that the bot is alive")
@@ -17,7 +17,7 @@ async def ping(ctx: Context) -> str:
     if packet_hash is None:
         return reply
     link = packet_url(packet_hash)
-    if len(f"{reply} {link}") > MAX_MESSAGE_LEN:
+    if not fits(f"{reply} {link}"):
         # A long route doesn't fit beside the link; Beacon shows it anyway.
         reply = f"@[{who}] pong ({ctx.message.hop_count} hops)"
     return f"{reply} {link}"
