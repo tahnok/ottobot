@@ -12,6 +12,11 @@ def test_fits_counts_utf8_bytes() -> None:
     assert not fits("é" * (MAX_MESSAGE_LEN // 2 + 1))
 
 
+def test_fits_does_not_raise_on_a_lone_surrogate() -> None:
+    assert fits("\ud800")
+    assert not fits("\ud800" * MAX_MESSAGE_LEN)
+
+
 def test_pack_nothing() -> None:
     assert pack_messages([]) == []
 

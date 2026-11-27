@@ -13,7 +13,10 @@ MAX_MESSAGE_LEN = 140
 
 def fits(text: str, limit: int = MAX_MESSAGE_LEN) -> bool:
     """Whether *text* fits in one mesh packet."""
-    return len(text.encode("utf-8")) <= limit
+    # surrogatepass: a lone surrogate (which can't be encoded as UTF-8) is
+    # measured rather than raising, so a stray one in a help string or
+    # incoming text can't crash the handler that's sizing a reply.
+    return len(text.encode("utf-8", errors="surrogatepass")) <= limit
 
 
 def pack_messages(
