@@ -6,16 +6,28 @@ from ottobot import Context, command
 # plus the #ott-alerts channel. This is a user-facing directory of channels to
 # join, not the set the bot itself tunes to (see ottobot.channels.CHANNELS).
 CHANNELS = (
-    "#ottawa",
-    "#bots",
-    "#testing",
-    "#hike",
-    "#bike",
-    "#hamradio",
-    "#games",
-    "#aircraft",
-    "#watersports",
-    "#ott-alerts",
+	"#aircraft",
+	"#altavista",
+	"#aylmer",
+	"#bike",
+	"#bots",
+	"#caf",
+	"#cars",
+	"#constancebay",
+	"#demoscene",
+	"#games",
+	"#hamradio",
+	"#hike",
+	"#music",
+	"#onqc",
+	"#operators",
+	"#ottawa",
+	"#ott-alerts",
+	"#radio",
+	"#testing",
+	"#wardriving",
+	"#watersports",
+	"#queer",
 )
 
 
